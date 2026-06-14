@@ -1,6 +1,48 @@
 const https = require('https');
 
-const EBAY_TOKEN = process.env.EBAY_TOKEN || 'v^1.1#i^1#I^3#f^0#p^1#r^0#t^H4sIAAAAAAAA/+VYe2wURRi/7YsWCkJKihAhx4KaqLc3+7jr3do7PPqQEq4tvYNgjSFzu7Pt0n0cO7u054tSUgyR+AeSaNRESCpvwcQoQYzloQYQiahI+EMk2ijGYIJ/CBFjnL2W0lYCSI/YxPvnMt98883v+833mB3QWVTy0LoF6y5PpMblbe4EnXkUxU4AJUWFD0/Kz5tR6AFDFKjNnXM7C7ryL1RiqGtpsQnhtGlg5O3QNQOLWWGEdixDNCFWsWhAHWHRlsRELL5I5Bggpi3TNiVTo7111RFa4AUAUxVIASgIpBAkUuOazaQZoQMCJwSRoFSgFAjzqRCZx9hBdQa2oWFHaA5wQR8I+lg+yfFiICCCEBPiQTPtXYosrJoGUWEAHc3CFbNrrSFYbw4VYowsmxiho3Wx2kRDrK66pj5Z6R9iKzrAQ8KGtoOHj6pMGXmXQs1BN98GZ7XFhCNJCGPaH+3fYbhRMXYNzB3Az1ItAcDCoMApQEqlOCE3VNaalg7tm+NwJarsU7KqIjJs1c7cilHCRmoFkuyBUT0xUVftdf8WO1BTFRVZEbpmfuyJWGMjHU1mNAJxgemLZ6qgJSdNX2NTta8iKKRYOahIPl4IhgIcCAxs1G9tgOYRO1WZhqy6pGFvvWnPRwQ1GsmNMIQbotRgNFgxxXYRDeoJScBe45Bjm91D7T9Fx2413HNFOiHCmx3e+gQGV9u2paYcGw1aGDmRpShCw3RalemRk9lYHAifDhyhW207Lfr97e3tTDvPmFaLnyMx4l8WX5SQWpFOkrFDd3O9X1+99QKfmnVFQmQlVkU7kyZYOkisEgBGCx0NVLAsyw3wPhxWdKT0H4IhPvuHZ0SuMoSFFUEYVkJsgAdQYGEuMiQ6EKR+FwdKwYxPh1YbstMalJBPInHm6MhSZZEPKBwfUpBPDoYVnxBWFF8qIJPNFIQAQqmUFA79nxLldkM9gSQL2TmJ9ZzFeaYF4cDj8ZWQW6EqDYtXJmuTVdx8q10Q2i3NgTVOc9XCZXE9E2djkdvNhhs6X6WphJkk2T8XBLi5njsSFpjYRvKo3EtIZho1mpoqZcbWAfOW3AgtO5NAmkYEo3Iylk7X5aZW58y9f1km7szv3PWo/6g/3dAr7Ibs2PLKXY+JAZhWGbcDMZKp+91cNyG5frji5VnU3hsqjlDyExlpWBJiSF+SU1BqYywEZdPQMqPiTSU33zHFGvGznwRV7r+yMlkmGLxKIh5j0yEcYKbBvcElzTZkkH5oW6ZGEmcpO+p6oOuODVMaGmuFIQcJosIx1qzZihDLh4UwCI3KLynbipePtZLmlvKCLgre9XLehKCmjy3f05YpO5J7R70Lnxz+4Q8gUU/2x3ZRh0EX9VEeRYFKcD87B8wuyl9SkF86A6s2YlSoMFhtMch3vYWYNpRJQ9XKK/McP322ftaBhdvX903r7J7r3+iZNOT9ZfNT4N7BF5iSfHbCkOcYcN/1mUL2nmkTuSAIsjzHBwIg1AzmXJ8tYMsLpj545JWvome/7WqjL/Z4DtUfPbL35PNg4qASRRV6SLB4jBc3HZi3a9nsjWblqj87mPeuvLC19Fis7JGVV1v5qdrH03e8rJ1dvWHLmaKvf13T0+OlXnpj/7zt3XsOX+41Jq+vLtb6GracYPom7372r31f1OtFp0p/Dsx++62kvzo+eW0x//vBkjPOzP2zEh7fk1RJ057SVcd3vVn0zGvj3t1xZPr21d87hz/1jGvrC5f2tjhXx5/Me/XAvu8ovfX9mZ9cmjT+WO+5Xe2974g/PXcp+FimtSBZv3x3edPTX66Z8vovyqlz3xzySEt+21s+q3Vx3bbiqj+mlFGfVW/aGe/4sfzzzpqenapxseuH7qNyWfFahj0a3/bABzPP71j96IYTp7eGP+zOHAxfOXTh3Pn+s/wb8kWdJRkTAAA=';
+// Credentials stored in Vercel environment variables
+const EBAY_APP_ID  = process.env.EBAY_APP_ID  || '';
+const EBAY_CERT_ID = process.env.EBAY_CERT_ID || '';
+
+let cachedToken = null;
+let tokenExpiry = 0;
+
+function getToken() {
+  return new Promise((resolve, reject) => {
+    if (cachedToken && Date.now() < tokenExpiry) return resolve(cachedToken);
+
+    const creds = Buffer.from(`${EBAY_APP_ID}:${EBAY_CERT_ID}`).toString('base64');
+    const body  = 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope';
+
+    const options = {
+      hostname: 'api.ebay.com',
+      path: '/identity/v1/oauth2/token',
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${creds}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (!json.access_token) throw new Error('No token');
+          cachedToken = json.access_token;
+          tokenExpiry = Date.now() + (json.expires_in - 60) * 1000;
+          resolve(cachedToken);
+        } catch(e) { reject(new Error('Token error: ' + data.substring(0,100))); }
+      });
+    });
+    req.on('error', e => reject(e));
+    req.write(body);
+    req.end();
+  });
+}
 
 function detectCondition(title) {
   const t = (title || '').toLowerCase();
@@ -15,25 +57,25 @@ function detectCondition(title) {
   return 'Raw';
 }
 
-function ebayRequest(path) {
+function ebaySearch(token, q, sort, limit) {
   return new Promise((resolve, reject) => {
+    const path = `/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}`;
     const options = {
       hostname: 'api.ebay.com',
       path,
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${EBAY_TOKEN}`,
+        'Authorization': `Bearer ${token}`,
         'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
         'Accept': 'application/json',
-        'User-Agent': 'SlabCheck/1.0',
       }
     };
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch(e) { reject(new Error('Parse error')); }
+        try { resolve(JSON.parse(data).itemSummaries || []); }
+        catch(e) { reject(e); }
       });
     });
     req.on('error', e => reject(e));
@@ -42,13 +84,13 @@ function ebayRequest(path) {
   });
 }
 
-function processItems(items) {
+function process(items) {
   return items.map(item => ({
-    title: item.title || '',
-    price: parseFloat(item.price?.value || item.currentBidPrice?.value || 0),
-    date: (item.itemEndDate || item.listingDate || new Date().toISOString()).split('T')[0],
+    title:     item.title || '',
+    price:     parseFloat(item.price?.value || 0),
+    date:      (item.itemEndDate || new Date().toISOString()).split('T')[0],
     condition: item.condition || detectCondition(item.title),
-    url: item.itemWebUrl || '#',
+    url:       item.itemWebUrl || '#',
   })).filter(s => s.price > 0);
 }
 
@@ -60,30 +102,19 @@ module.exports = async (req, res) => {
   if (!query) return res.status(400).json({ error: 'Query required' });
 
   try {
-    const q = encodeURIComponent(query);
-
-    // Fetch all listings sorted by newly listed (most recent first)
-    const [newJson, cheapJson] = await Promise.all([
-      ebayRequest(`/buy/browse/v1/item_summary/search?q=${q}&limit=50&sort=newlyListed`),
-      ebayRequest(`/buy/browse/v1/item_summary/search?q=${q}&limit=10&sort=price`),
+    const token = await getToken();
+    const [newItems, cheapItems] = await Promise.all([
+      ebaySearch(token, query, 'newlyListed', 50),
+      ebaySearch(token, query, 'price', 10),
     ]);
 
-    const allItems  = processItems(newJson.itemSummaries  || []);
-    const cheapItems = processItems(cheapJson.itemSummaries || []);
-
-    // Cheapest 5 active listings
-    const cheapest = cheapItems
-      .filter(i => !['lot','bundle','master set','collection'].some(w => i.title.toLowerCase().includes(w)))
+    const listings = process(newItems);
+    const cheapest = process(cheapItems)
+      .filter(i => !['lot','bundle','master set'].some(w => i.title.toLowerCase().includes(w)))
       .sort((a,b) => a.price - b.price)
       .slice(0, 5);
 
-    res.json({
-      listings: allItems,
-      cheapest,
-      query,
-      total: allItems.length,
-    });
-
+    res.json({ listings, cheapest, query, total: listings.length });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
