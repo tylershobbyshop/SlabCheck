@@ -1,80 +1,117 @@
 const https = require('https');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lukwsphqdorfxcmefrui.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1a3dzcGhxZG9yZnhjbWVmcnVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDk5MDIsImV4cCI6MjA5NzEyNTkwMn0.9ir4EGztOM8HXLQGXrQtm2NzUOeCQfAUQpduteMj-F0';
+const EBAY_APP_ID  = process.env.EBAY_APP_ID;
+const EBAY_CERT_ID = process.env.EBAY_CERT_ID;
 
-function supabaseRequest(method, path, data) {
+let cachedToken = null;
+let tokenExpiry = 0;
+
+function getToken() {
   return new Promise((resolve, reject) => {
-    const url = new URL(SUPABASE_URL);
-    const body = data ? JSON.stringify(data) : null;
+    if (cachedToken && Date.now() < tokenExpiry) return resolve(cachedToken);
+    const creds = Buffer.from(`${EBAY_APP_ID}:${EBAY_CERT_ID}`).toString('base64');
+    const body  = 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope';
     const options = {
-      hostname: url.hostname,
-      path: `/rest/v1/${path}`,
-      method,
+      hostname: 'api.ebay.com',
+      path: '/identity/v1/oauth2/token',
+      method: 'POST',
       headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation',
+        'Authorization': `Basic ${creds}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
       }
     };
-    if (body) options.headers['Content-Length'] = Buffer.byteLength(body);
-
     const req = https.request(options, (res) => {
-      let d = '';
-      res.on('data', c => d += c);
+      let data = '';
+      res.on('data', c => data += c);
       res.on('end', () => {
-        try { resolve(JSON.parse(d)); }
-        catch(e) { resolve([]); }
+        try {
+          const json = JSON.parse(data);
+          if (!json.access_token) throw new Error('No token: ' + data.substring(0,100));
+          cachedToken = json.access_token;
+          tokenExpiry = Date.now() + (json.expires_in - 60) * 1000;
+          resolve(cachedToken);
+        } catch(e) { reject(e); }
       });
     });
     req.on('error', e => reject(e));
-    if (body) req.write(body);
+    req.write(body);
     req.end();
   });
 }
 
+function detectCondition(title) {
+  const t = (title || '').toLowerCase();
+  if (t.includes('psa 10') || t.includes('gem mint')) return 'PSA 10';
+  if (t.includes('psa 9.5')) return 'PSA 9.5';
+  if (t.includes('psa 9')) return 'PSA 9';
+  if (t.includes('bgs 9.5')) return 'BGS 9.5';
+  if (t.includes('bgs 10')) return 'BGS 10';
+  if (t.includes('cgc 10')) return 'CGC 10';
+  if (t.includes('sgc 10')) return 'SGC 10';
+  if (t.includes('psa')||t.includes('bgs')||t.includes('cgc')||t.includes('sgc')) return 'Graded';
+  return 'Raw';
+}
+
+function browseSearch(token, q, sort, limit) {
+  return new Promise((resolve, reject) => {
+    const path = `/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}`;
+    const options = {
+      hostname: 'api.ebay.com',
+      path,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'Accept': 'application/json',
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data).itemSummaries || []); }
+        catch(e) { resolve([]); }
+      });
+    });
+    req.on('error', () => resolve([]));
+    req.setTimeout(8000, () => { req.destroy(); resolve([]); });
+    req.end();
+  });
+}
+
+function process(items) {
+  return items.map(item => ({
+    title:     item.title || '',
+    price:     parseFloat(item.price?.value || 0),
+    date:      (item.itemEndDate || new Date().toISOString()).split('T')[0],
+    condition: item.condition || detectCondition(item.title),
+    url:       item.itemWebUrl || '#',
+  })).filter(s => s.price > 0);
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=60');
+  res.setHeader('Cache-Control', 's-maxage=180');
 
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: 'Query required' });
 
   try {
-    const key = query.toLowerCase().trim();
+    const token = await getToken();
 
-    // Check if we have cached data in Supabase
-    const cached = await supabaseRequest(
-      'GET',
-      `card_prices?search_key=eq.${encodeURIComponent(key)}&order=sold_date.desc&limit=50`,
-    );
+    const [allItems, cheapItems] = await Promise.all([
+      browseSearch(token, query, 'newlyListed', 50),
+      browseSearch(token, query, 'price', 10),
+    ]);
 
-    if (cached && cached.length > 0) {
-      const listings = cached.map(r => ({
-        title: r.title,
-        price: r.price,
-        date: r.sold_date,
-        condition: r.condition,
-        url: r.url,
-      }));
+    const listings = process(allItems);
+    const cheapest = process(cheapItems)
+      .filter(i => !['lot','bundle','master set','collection'].some(w => i.title.toLowerCase().includes(w)))
+      .sort((a,b) => a.price - b.price)
+      .slice(0, 5);
 
-      const cheapest = [...listings]
-        .sort((a, b) => a.price - b.price)
-        .slice(0, 5);
-
-      return res.json({ listings, cheapest, query, total: listings.length, source: 'cache' });
-    }
-
-    // No data yet — return empty with a flag so frontend shows "no data yet" message
-    return res.json({
-      listings: [],
-      cheapest: [],
-      query,
-      total: 0,
-      source: 'empty',
-      message: 'No data yet for this card. Check back soon as our database builds up!'
-    });
+    res.json({ listings, cheapest, query, total: listings.length });
 
   } catch(e) {
     res.status(500).json({ error: e.message });
