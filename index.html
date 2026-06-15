@@ -393,9 +393,24 @@ async function doSearch(){
 
   try{
     const res = await fetch(`${PROXY}/api/search?q=${encodeURIComponent(q)}`);
-    allData = await res.json();
-    if(!Array.isArray(allData)) allData=[];
+    const json = await res.json();
+    // Handle both array and {listings, cheapest} formats
+    if(Array.isArray(json)){
+      allData = json;
+      activeListings = [];
+    } else {
+      allData = json.listings || [];
+      activeListings = json.cheapest || [];
+    }
+    if(!allData.length){
+      document.getElementById('rlabel').innerHTML=`No results for <strong>"${q}"</strong>`;
+      document.getElementById('gradeGrid').innerHTML='';
+      document.getElementById('activeSection').style.display='none';
+      document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">No listings found. Try a different search.</div></td></tr>`;
+      return;
+    }
     document.getElementById('rlabel').innerHTML=`<strong>${allData.length}</strong> listings for <strong>"${q}"</strong>`;
+    renderActive();
     render();
   }catch(e){
     document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">Error loading. Try again.</div></td></tr>`;
