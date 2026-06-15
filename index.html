@@ -451,6 +451,475 @@ function render(){
   const lo  = a=>a.length?Math.min(...a.map(s=>s.price)):null;
   const hi  = a=>a.length?Math.max(...a.map(s=>s.price)):null;
 
+  const gc=(label,arr,star,key)=>{
+    const a=avg(arr);
+    const cls='gc'+(star?' star':'')+' gc-btn';
+    if(!a) return `<div class="${cls}" onclick="setGradeFilter('${key}')" data-filter="${key}"><div class="gc-label">${label}</div><div class="gc-na">—</div></div>`;
+    return `<div class="${cls}" onclick="setGradeFilter('${key}')" data-filter="${key}">
+      <div class="gc-label">${label}</div>
+      <div class="gc-price">$${a.toFixed(0)}</div>
+      <div class="gc-range">$${lo(arr).toFixed(0)} – $${hi(arr).toFixed(0)}</div>
+      <div class="gc-count">${arr.length} listing${arr.length!==1?'s':''}</div>
+    </div>`;
+  };
+
+  document.getElementById('gradeGrid').innerHTML =
+    gc('Raw',raw,false,'raw')+
+    gc('PSA 9',psa9,false,'psa9')+
+    gc('PSA 10',psa10,true,'psa10')+
+    gc('PSA 8',psa8,false,'psa8')+
+    gc('PSA 7 & Under',psa7,false,'psa7');">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlabCheck — Free Sports Card Price Tracker</title>
+<meta name="description" content="Free sports card price tracker. Search any card and see real eBay prices by grade. No subscription required.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;
+  --border:rgba(255,255,255,0.08);--text:#f0f0f0;--dim:#555;--mid:#888;
+  --green:#22c55e;--red:#ef4444;--accent:#6366f1;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+a{text-decoration:none;color:inherit;}
+
+/* ── HOME SCREEN ─────────────────────────────────────────── */
+#home{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:24px 16px;
+  transition:all 0.3s;
+}
+#home.has-results{
+  min-height:auto;
+  padding:16px;
+  border-bottom:1px solid var(--border);
+  position:sticky;
+  top:0;
+  background:rgba(10,10,10,0.97);
+  backdrop-filter:blur(12px);
+  z-index:100;
+  flex-direction:row;
+  justify-content:center;
+  gap:16px;
+  align-items:center;
+}
+
+/* LOGO */
+.logo{
+  font-size:clamp(48px,10vw,72px);
+  font-weight:800;
+  letter-spacing:-2px;
+  margin-bottom:32px;
+  transition:all 0.3s;
+  cursor:pointer;
+  user-select:none;
+}
+.logo span{color:var(--accent);}
+.has-results .logo{
+  font-size:22px;
+  margin-bottom:0;
+  letter-spacing:-0.5px;
+  flex-shrink:0;
+}
+
+/* SEARCH BOX */
+.search-box{
+  width:100%;
+  max-width:580px;
+  position:relative;
+  transition:all 0.3s;
+}
+.has-results .search-box{
+  max-width:480px;
+  flex:1;
+}
+.search-input{
+  width:100%;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:24px;
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  font-size:16px;
+  padding:14px 110px 14px 20px;
+  outline:none;
+  transition:border-color 0.2s,box-shadow 0.2s;
+}
+.search-input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(99,102,241,0.1);
+}
+.search-input::placeholder{color:var(--dim);}
+.has-results .search-input{
+  font-size:14px;
+  padding:11px 90px 11px 16px;
+  border-radius:20px;
+}
+.search-btn{
+  position:absolute;right:5px;top:50%;transform:translateY(-50%);
+  background:var(--accent);color:#fff;border:none;
+  border-radius:20px;font-family:'Inter',sans-serif;
+  font-size:13px;font-weight:600;padding:8px 18px;
+  cursor:pointer;transition:background 0.2s;white-space:nowrap;
+}
+.search-btn:hover{background:#4f46e5;}
+
+/* PILLS — only shown on home */
+.pills{
+  display:flex;gap:8px;flex-wrap:wrap;
+  justify-content:center;margin-top:16px;
+  transition:all 0.3s;
+}
+.has-results .pills{display:none;}
+.pill{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:20px;padding:6px 14px;cursor:pointer;
+  font-size:12px;color:var(--mid);transition:all 0.2s;
+}
+.pill:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── RESULTS PAGE ─────────────────────────────────────────── */
+#resultsPage{display:none;padding:24px 16px 80px;}
+#resultsPage.show{display:block;}
+.results-inner{max-width:900px;margin:0 auto;}
+
+/* Results label */
+.results-label{font-size:13px;color:var(--mid);margin-bottom:16px;}
+.results-label strong{color:var(--text);}
+
+/* GRADE CARDS */
+.grade-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+  margin-bottom:16px;
+}
+@media(min-width:500px){.grade-grid{grid-template-columns:repeat(5,1fr);}}
+.gc{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px 12px;
+  text-align:center;
+  transition:all 0.2s;
+  cursor:pointer;
+}
+.gc:hover{border-color:var(--accent);background:var(--surface2);transform:translateY(-2px);}
+.gc.active{border-color:var(--accent);background:#0f0f1a;box-shadow:0 0 0 2px rgba(99,102,241,0.3);}
+.gc.star{border-color:rgba(99,102,241,0.5);background:#0f0f1a;}
+.gc.star.active{box-shadow:0 0 0 2px rgba(99,102,241,0.5);}
+.gc-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:8px;}
+.gc-price{font-size:24px;font-weight:700;letter-spacing:-0.5px;}
+.gc-range{font-size:10px;color:var(--dim);margin-top:4px;}
+.gc-count{font-size:10px;color:var(--accent);margin-top:3px;}
+.gc-na{font-size:18px;color:var(--dim);}
+.al-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:border-color 0.2s;}
+.al-item:hover{border-color:var(--green);}
+.al-title{font-size:12px;color:var(--mid);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.al-price{font-size:15px;font-weight:700;color:var(--green);white-space:nowrap;}
+.al-btn{background:var(--green);color:#000;font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;white-space:nowrap;transition:opacity 0.2s;}
+.al-btn:hover{opacity:0.85;}
+
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:12px;
+  height:200px;
+}
+
+
+
+
+
+/* TABLE */
+.table-box{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+}
+table{width:100%;border-collapse:collapse;}
+th{
+  font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:1px;
+  color:var(--dim);padding:11px 14px;
+  text-align:left;border-bottom:1px solid var(--border);
+  background:var(--surface2);white-space:nowrap;
+}
+td{
+  padding:11px 14px;font-size:13px;
+  border-bottom:1px solid rgba(255,255,255,0.03);
+  vertical-align:middle;
+}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,0.02);}
+.tp{font-weight:700;color:var(--green);font-size:14px;white-space:nowrap;}
+.tt{color:var(--mid);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.td{color:var(--dim);font-size:11px;white-space:nowrap;}
+.cb{display:inline-block;font-size:9px;font-weight:600;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}
+.cb0{background:rgba(255,255,255,0.06);color:var(--mid);}
+.cb1{background:rgba(99,102,241,0.15);color:var(--accent);}
+.tl{color:var(--accent);font-size:11px;opacity:0.7;}
+.tl:hover{opacity:1;}
+
+/* Hide on mobile */
+@media(max-width:520px){
+  .hide-sm{display:none;}
+  .tt{max-width:130px;}
+}
+
+/* AD */
+.ad{
+  background:var(--surface);
+  border:1px dashed rgba(255,255,255,0.07);
+  border-radius:10px;
+  padding:12px;
+  text-align:center;
+  font-size:11px;
+  color:var(--dim);
+  margin:16px 0;
+}
+.ad a{color:var(--accent);}
+
+/* TRENDING */
+#trendPage{padding:0 16px 80px;margin-top:-24px;}
+.trend-inner{max-width:900px;margin:0 auto;}
+.sec-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:12px;padding-top:8px;}
+.trend-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+}
+@media(min-width:500px){.trend-grid{grid-template-columns:repeat(3,1fr);}}
+@media(min-width:700px){.trend-grid{grid-template-columns:repeat(4,1fr);}}
+.tc{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+.tc:hover{border-color:rgba(99,102,241,0.4);background:var(--surface2);}
+.tc-p{font-size:13px;font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tc-s{font-size:10px;color:var(--dim);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tc-pr{font-size:18px;font-weight:700;color:var(--green);}
+.tc-ch{font-size:10px;margin-top:3px;}
+.up{color:var(--green);}
+.dn{color:var(--red);}
+
+/* LOADING */
+.loading{text-align:center;padding:48px 16px;color:var(--dim);}
+.spin{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;margin:0 auto 12px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:20px 16px;text-align:center;font-size:11px;color:var(--dim);}
+footer a{color:var(--accent);}
+</style>
+</head>
+<body>
+
+<!-- HOME / STICKY HEADER -->
+<div id="home">
+  <div class="logo" onclick="goHome()">Slab<span>Check</span></div>
+  <div class="search-box">
+    <input type="text" class="search-input" id="si" placeholder="Search any card... e.g. Wembanyama Prizm Silver RC" onkeydown="if(event.key==='Enter')doSearch()">
+    <button class="search-btn" onclick="doSearch()">Search</button>
+  </div>
+  <div class="pills">
+    <span class="pill" onclick="sq('2023-24 Panini Prizm Victor Wembanyama 136 Silver RC')">Wemby Prizm RC</span>
+    <span class="pill" onclick="sq('2025-26 Topps Chrome Cooper Flagg Rookie RC')">Cooper Flagg RC</span>
+    <span class="pill" onclick="sq('2018-19 Donruss Optic Jalen Brunson 179 Fast Break RC')">Brunson Fast Break</span>
+    <span class="pill" onclick="sq('2018-19 Panini Prizm Shai Gilgeous-Alexander 139 Silver RC')">SGA Prizm RC</span>
+    <span class="pill" onclick="sq('1999 Pokemon Base Set Pikachu 58 PSA 10')">Pikachu PSA 10</span>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="resultsPage">
+  <div class="results-inner">
+    <div class="results-label" id="rlabel"></div>
+    
+    <div class="grade-grid" id="gradeGrid"></div>
+    <div class="table-box">
+      <table>
+        <thead><tr>
+          <th>Price</th>
+          <th>Card</th>
+          <th class="hide-sm">Date</th>
+          <th>Grade</th>
+          <th class="hide-sm">Link</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Cheapest active listings -->
+    <div id="activeSection" style="display:none;margin-top:16px;">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:8px;">🛒 Cheapest Buy It Now Listings</div>
+      <div id="activeListings" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    <div class="ad">Advertisement · <a href="mailto:tylershobbyshop@gmail.com">Advertise on SlabCheck</a></div>
+  </div>
+</div>
+
+<!-- TRENDING -->
+<div id="trendPage">
+  <div class="trend-inner">
+    <div class="sec-label">🔥 Trending Searches</div>
+    <div class="trend-grid" id="trendGrid"></div>
+  </div>
+</div>
+
+<footer>
+  SlabCheck · Free card price tracker · Powered by eBay data ·
+  <a href="mailto:tylershobbyshop@gmail.com">Advertise</a> ·
+  <a href="https://www.ebay.com/str/tylershobbyshop" target="_blank">Tyler's Card Shop</a>
+</footer>
+
+<script>
+const PROXY = 'https://slab-check.vercel.app';
+const TRENDING = [
+  {p:'Victor Wembanyama',s:'2023-24 Prizm Silver #136 RC',pr:'$480',ch:'+12%',up:true,q:'2023-24 Panini Prizm Victor Wembanyama 136 Silver RC'},
+  {p:'Cooper Flagg',s:'2025-26 Topps Chrome RC',pr:'$180',ch:'+8%',up:true,q:'2025-26 Topps Chrome Cooper Flagg Rookie RC'},
+  {p:'Jalen Brunson',s:'2018-19 Optic Fast Break #179',pr:'$9,800',ch:'+3%',up:true,q:'2018-19 Donruss Optic Jalen Brunson 179 Fast Break RC'},
+  {p:'SGA',s:'2018-19 Prizm Silver #139 RC',pr:'$420',ch:'+6%',up:true,q:'2018-19 Panini Prizm Shai Gilgeous-Alexander 139 Silver RC'},
+  {p:'Shohei Ohtani',s:'2018 Topps Archives #50 PSA 10',pr:'$395',ch:'+5%',up:true,q:'2018 Topps Archives Shohei Ohtani 50 PSA 10'},
+  {p:'Pikachu',s:'1999 Base Set #58 PSA 10',pr:'$4,200',ch:'+2%',up:true,q:'1999 Pokemon Base Set Pikachu 58 PSA 10'},
+  {p:'LeBron James',s:'2003-04 Topps Chrome #111 RC',pr:'$1,800',ch:'-2%',up:false,q:'2003-04 Topps Chrome LeBron James 111 Rookie RC'},
+  {p:'Dylan Harper',s:'2025-26 Topps Chrome RC',pr:'$95',ch:'+15%',up:true,q:'2025-26 Topps Chrome Dylan Harper Rookie RC'},
+];
+
+let allData=[], activeListings=[], activeTab='all', gradeFilter=null;
+
+// Render trending
+document.getElementById('trendGrid').innerHTML = TRENDING.map(t=>`
+  <div class="tc" onclick="sq('${t.q}')">
+    <div class="tc-p">${t.p}</div>
+    <div class="tc-s">${t.s}</div>
+    <div class="tc-pr">${t.pr}</div>
+    <div class="tc-ch ${t.up?'up':'dn'}">${t.ch}</div>
+  </div>`).join('');
+
+function sq(q){document.getElementById('si').value=q;doSearch();}
+function goHome(){
+  document.getElementById('home').classList.remove('has-results');
+  document.getElementById('resultsPage').classList.remove('show');
+  document.getElementById('resultsPage').style.display='none';
+  document.getElementById('trendPage').style.display='';
+  document.getElementById('si').value='';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function doSearch(){
+  const q = document.getElementById('si').value.trim();
+  if(!q) return;
+
+  // Switch to results mode
+  document.getElementById('home').classList.add('has-results');
+  document.getElementById('resultsPage').classList.add('show');
+  document.getElementById('resultsPage').style.display='block';
+  document.getElementById('trendPage').style.display='none';
+  document.getElementById('rlabel').innerHTML = `Loading prices for <strong>"${q}"</strong>...`;
+  document.getElementById('gradeGrid').innerHTML='';
+  document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading"><div class="spin"></div>Fetching prices...</div></td></tr>`;
+
+  window.scrollTo({top:0,behavior:'smooth'});
+
+  try{
+    const res = await fetch(`${PROXY}/api/search?q=${encodeURIComponent(q)}`);
+    const json = await res.json();
+    if(Array.isArray(json)){
+      allData = json;
+      activeListings = [];
+    } else {
+      allData = json.listings || [];
+      activeListings = (json.cheapest || []).filter(i => !i.title.toLowerCase().includes('[digital]') && i.price >= 1.00);
+    }
+    if(!allData.length){
+      document.getElementById('rlabel').innerHTML=`No results for <strong>"${q}"</strong>`;
+      document.getElementById('gradeGrid').innerHTML='';
+      document.getElementById('activeSection').style.display='none';
+      document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">No listings found.</div></td></tr>`;
+      return;
+    }
+    document.getElementById('rlabel').innerHTML=`<strong>${allData.length}</strong> listings for <strong>"${q}"</strong>`;
+    gradeFilter=null;
+    document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
+    render();
+    renderActive();
+  }catch(e){
+    document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">Error loading. Try again.</div></td></tr>`;
+  }
+}
+
+function clean(data){
+  return data.filter(s=>{
+    const t=(s.title||'').toLowerCase();
+    return !t.includes(' lot') && !t.includes('master set') && !t.includes(' bundle') && !t.includes(' collection');
+  });
+}
+
+function isGraded(c){
+  return c && !['Raw','Ungraded','Used','','Brand new','New','Pre-owned'].includes(c);
+}
+function getGrade(item){
+  const t = (item.title||'').toLowerCase();
+  if(t.includes('psa 10')||t.includes('gem mint')) return 'PSA 10';
+  if(t.includes('psa 9.5')) return 'PSA 9.5';
+  if(t.includes('psa 9')) return 'PSA 9';
+  if(t.includes('psa 8')) return 'PSA 8';
+  if(t.includes('psa 7')) return 'PSA 7';
+  if(t.includes('psa 6')) return 'PSA 6';
+  if(t.includes('psa 5')) return 'PSA 5';
+  if(t.includes('psa 7')) return 'PSA 7';
+  if(t.includes('psa 6')) return 'PSA 6';
+  if(t.includes('psa 5')) return 'PSA 5';
+  if(t.includes('bgs 10')||t.includes('pristine')) return 'BGS 10';
+  if(t.includes('bgs 9.5')) return 'BGS 9.5';
+  if(t.includes('bgs 9')) return 'BGS 9';
+  if(t.includes('cgc 10')) return 'CGC 10';
+  if(t.includes('cgc 9.5')) return 'CGC 9.5';
+  if(t.includes('sgc 10')) return 'SGC 10';
+  if(t.includes('psa')||t.includes('bgs')||t.includes('cgc')||t.includes('sgc')) return 'Graded';
+  return item.condition||'Raw';
+}
+
+function renderActive(){
+  const sec = document.getElementById('activeSection');
+  const box = document.getElementById('activeListings');
+  if(!activeListings.length){sec.style.display='none';return;}
+  sec.style.display='block';
+  box.innerHTML = activeListings.map(item=>`
+    <div class="al-item">
+      <div class="al-title">${item.title}</div>
+      <div class="al-price">$${Number(item.price).toFixed(0)}</div>
+      <a href="${item.url}" target="_blank" class="al-btn">Buy →</a>
+    </div>`).join('');
+}
+
+function render(){
+  const data = clean(allData);
+  const raw   = data.filter(s=>!isGraded(getGrade(s)));
+  const psa10 = data.filter(s=>getGrade(s)==='PSA 10');
+  const psa9  = data.filter(s=>['PSA 9','PSA 9.5'].includes(getGrade(s)));
+  const psa8  = data.filter(s=>getGrade(s)==='PSA 8');
+  const psa7  = data.filter(s=>['PSA 7','PSA 6','PSA 5'].includes(getGrade(s)));
+
+  const avg = a=>a.length?a.reduce((x,b)=>x+b.price,0)/a.length:null;
+  const lo  = a=>a.length?Math.min(...a.map(s=>s.price)):null;
+  const hi  = a=>a.length?Math.max(...a.map(s=>s.price)):null;
+
   const gc=(label,arr,star)=>{
     const a=avg(arr);
     if(!a) return `<div class="gc${star?' star':''}"><div class="gc-label">${label}</div><div class="gc-na">—</div></div>`;
@@ -504,18 +973,13 @@ function renderTable(){
 
 
 function setGradeFilter(key){
-  // Toggle - click same box again to deselect
   if(gradeFilter===key){
     gradeFilter=null;
-    activeTab='all';
-    document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('on', b.textContent==='All'));
+    document.querySelectorAll('[data-filter]').forEach(g=>g.classList.remove('active'));
   } else {
     gradeFilter=key;
-    activeTab='grade';
-    document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
-    document.querySelector(`[data-filter="${key}"]`)?.classList.add('active');
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
+    document.querySelectorAll('[data-filter]').forEach(g=>g.classList.remove('active'));
+    document.querySelector('[data-filter="'+key+'"]')?.classList.add('active');
   }
   renderTable();
 }
