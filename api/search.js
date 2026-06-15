@@ -106,9 +106,13 @@ module.exports = async (req, res) => {
       browseSearch(token, query, 'newlyListed', 50),
       browseSearch(token, query, 'price', 10),
     ]);
-    const listings = process(allItems);
+    const listings = process(allItems).filter(i => !i.title.toLowerCase().includes('[digital]'));
     const cheapest = process(cheapItems)
-      .filter(i => !['lot','bundle','master set','collection'].some(w => i.title.toLowerCase().includes(w)))
+      .filter(i => {
+        const t = i.title.toLowerCase();
+        return !['lot','bundle','master set','collection','[digital]','digital card'].some(w => t.includes(w));
+      })
+      .filter(i => i.price >= 1.00)
       .sort((a,b) => a.price - b.price)
       .slice(0, 5);
     res.json({ listings, cheapest, query, total: listings.length });
