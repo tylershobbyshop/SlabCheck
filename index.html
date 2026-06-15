@@ -298,6 +298,13 @@ footer a{color:var(--accent);}
     <div class="results-label" id="rlabel"></div>
     <div class="grade-grid" id="gradeGrid"></div>
     <div class="chart-box"><canvas id="myChart"></canvas></div>
+
+    <!-- Cheapest active listings -->
+    <div id="activeSection" style="display:none;margin-bottom:12px;">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:8px;">🛒 Cheapest Buy It Now Listings</div>
+      <div id="activeListings" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
     <div class="tabs">
       <button class="tab-btn on" onclick="setTab('all',this)">All</button>
       <button class="tab-btn" onclick="setTab('raw',this)">Raw</button>
