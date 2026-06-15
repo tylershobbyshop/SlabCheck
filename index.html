@@ -425,7 +425,24 @@ function clean(data){
 }
 
 function isGraded(c){
-  return c && !['Raw','Ungraded','Used',''].includes(c);
+  return c && !['Raw','Ungraded','Used','','Brand new','New','Pre-owned'].includes(c);
+}
+
+function getGrade(item){
+  // Always check title first since eBay condition labels are generic
+  const t = (item.title||'').toLowerCase();
+  if(t.includes('psa 10')||t.includes('gem mint')) return 'PSA 10';
+  if(t.includes('psa 9.5')) return 'PSA 9.5';
+  if(t.includes('psa 9')) return 'PSA 9';
+  if(t.includes('psa 8')) return 'PSA 8';
+  if(t.includes('bgs 10')||t.includes('pristine')) return 'BGS 10';
+  if(t.includes('bgs 9.5')) return 'BGS 9.5';
+  if(t.includes('bgs 9')) return 'BGS 9';
+  if(t.includes('cgc 10')) return 'CGC 10';
+  if(t.includes('cgc 9.5')) return 'CGC 9.5';
+  if(t.includes('sgc 10')) return 'SGC 10';
+  if(t.includes('psa')||t.includes('bgs')||t.includes('cgc')||t.includes('sgc')) return 'Graded';
+  return item.condition||'Raw';
 }
 
 function renderActive(){
@@ -443,10 +460,10 @@ function renderActive(){
 
 function render(){
   const data = clean(allData);
-  const raw   = data.filter(s=>!isGraded(s.condition));
-  const psa10 = data.filter(s=>s.condition==='PSA 10');
-  const psa9  = data.filter(s=>s.condition==='PSA 9'||s.condition==='PSA 9.5');
-  const bgs   = data.filter(s=>['BGS 9.5','BGS 10'].includes(s.condition));
+  const raw   = data.filter(s=>!isGraded(getGrade(s)));
+  const psa10 = data.filter(s=>getGrade(s)==='PSA 10');
+  const psa9  = data.filter(s=>['PSA 9','PSA 9.5'].includes(getGrade(s)));
+  const bgs   = data.filter(s=>['BGS 9.5','BGS 10'].includes(getGrade(s)));
 
   const avg = a=>a.length?a.reduce((x,b)=>x+b.price,0)/a.length:null;
   const lo  = a=>a.length?Math.min(...a.map(s=>s.price)):null;
@@ -510,12 +527,13 @@ function renderTable(){
     return;
   }
   document.getElementById('tbody').innerHTML=rows.map(s=>{
-    const g=isGraded(s.condition);
+    const grade=getGrade(s);
+    const g=isGraded(grade);
     return `<tr>
       <td class="tp">$${Number(s.price).toFixed(0)}</td>
       <td class="tt">${s.title}</td>
       <td class="td hide-sm">${(s.date||'').slice(5)}</td>
-      <td><span class="cb ${g?'cb1':'cb0'}">${s.condition||'Raw'}</span></td>
+      <td><span class="cb ${g?'cb1':'cb0'}">${grade}</span></td>
       <td class="hide-sm"><a href="${s.url}" target="_blank" class="tl">View →</a></td>
     </tr>`;
   }).join('');
