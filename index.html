@@ -139,9 +139,13 @@ a{text-decoration:none;color:inherit;}
   border-radius:12px;
   padding:16px 12px;
   text-align:center;
-  transition:border-color 0.2s;
+  transition:all 0.2s;
+  cursor:pointer;
 }
+.gc:hover{border-color:var(--accent);background:var(--surface2);transform:translateY(-2px);}
+.gc.active{border-color:var(--accent);background:#0f0f1a;box-shadow:0 0 0 2px rgba(99,102,241,0.3);}
 .gc.star{border-color:rgba(99,102,241,0.5);background:#0f0f1a;}
+.gc.star.active{box-shadow:0 0 0 2px rgba(99,102,241,0.5);}
 .gc-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:8px;}
 .gc-price{font-size:24px;font-weight:700;letter-spacing:-0.5px;}
 .gc-range{font-size:10px;color:var(--dim);margin-top:4px;}
@@ -350,7 +354,7 @@ const TRENDING = [
   {p:'Dylan Harper',s:'2025-26 Topps Chrome RC',pr:'$95',ch:'+15%',up:true,q:'2025-26 Topps Chrome Dylan Harper Rookie RC'},
 ];
 
-let allData=[], activeListings=[], activeTab='all';
+let allData=[], activeListings=[], activeTab='all', gradeFilter=null;
 
 // Render trending
 document.getElementById('trendGrid').innerHTML = TRENDING.map(t=>`
@@ -518,8 +522,27 @@ function renderTable(){
 
 function setTab(t,btn){
   activeTab=t;
+  gradeFilter=null;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
+  document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
+  renderTable();
+}
+
+function setGradeFilter(key){
+  // Toggle - click same box again to deselect
+  if(gradeFilter===key){
+    gradeFilter=null;
+    activeTab='all';
+    document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('on', b.textContent==='All'));
+  } else {
+    gradeFilter=key;
+    activeTab='grade';
+    document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
+    document.querySelector(`[data-filter="${key}"]`)?.classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
+  }
   renderTable();
 }
 </script>
