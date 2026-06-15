@@ -297,7 +297,6 @@ footer a{color:var(--accent);}
     <div class="results-label" id="rlabel"></div>
     
     <div class="grade-grid" id="gradeGrid"></div>
-    <div class="chart-box"><canvas id="myChart"></canvas></div>
     <div class="tabs">
       <button class="tab-btn on" onclick="setTab('all',this)">All</button>
       <button class="tab-btn" onclick="setTab('raw',this)">Raw</button>
@@ -387,7 +386,6 @@ async function doSearch(){
   document.getElementById('rlabel').innerHTML = `Loading prices for <strong>"${q}"</strong>...`;
   document.getElementById('gradeGrid').innerHTML='';
   document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading"><div class="spin"></div>Fetching prices...</div></td></tr>`;
-  if(chartInst){chartInst.destroy();chartInst=null;}
 
   window.scrollTo({top:0,behavior:'smooth'});
 
@@ -491,7 +489,6 @@ function render(){
     gc('PSA 8',psa8,false)+
     gc('PSA 7 & Below',psa7,false);
 
-  // Chart removed - no sold data available yet
 
   renderTable();
 }
