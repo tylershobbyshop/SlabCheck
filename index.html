@@ -288,6 +288,7 @@ footer a{color:var(--accent);}
           <th>Card</th>
           <th class="hide-sm">Date</th>
           <th>Grade</th>
+          <th class="hide-sm">Link</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -489,6 +490,7 @@ function renderTable(){
       <td class="tt">${s.title}</td>
       <td class="td hide-sm">${(s.date||'').slice(5)}</td>
       <td><span class="cb ${g?'cb1':'cb0'}">${grade}</span></td>
+      <td class="hide-sm"><a href="${s.url}" target="_blank" class="tl">View →</a></td>
     </tr>`;
   }).join('');
 }
