@@ -166,26 +166,9 @@ a{text-decoration:none;color:inherit;}
   height:200px;
 }
 
-/* TABS */
-.tabs{
-  display:flex;gap:4px;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:10px;
-  padding:4px;
-  margin-bottom:12px;
-  overflow-x:auto;
-}
-.tab-btn{
-  flex:1;min-width:60px;
-  font-family:'Inter',sans-serif;
-  font-size:12px;font-weight:500;
-  padding:7px 10px;border-radius:7px;
-  border:none;background:none;
-  color:var(--dim);cursor:pointer;
-  transition:all 0.2s;white-space:nowrap;
-}
-.tab-btn.on{background:var(--accent);color:#fff;}
+
+
+
 
 /* TABLE */
 .table-box{
@@ -298,12 +281,6 @@ footer a{color:var(--accent);}
     <div class="results-label" id="rlabel"></div>
     
     <div class="grade-grid" id="gradeGrid"></div>
-    <div class="tabs">
-      <button class="tab-btn on" onclick="setTab('all',this)">All</button>
-      <button class="tab-btn" onclick="setTab('raw',this)">Raw</button>
-      <button class="tab-btn" onclick="setTab('graded',this)">Graded</button>
-      <button class="tab-btn" onclick="setTab('psa10',this)">PSA 10</button>
-    </div>
     <div class="table-box">
       <table>
         <thead><tr>
@@ -408,6 +385,8 @@ async function doSearch(){
       return;
     }
     document.getElementById('rlabel').innerHTML=`<strong>${allData.length}</strong> listings for <strong>"${q}"</strong>`;
+    gradeFilter=null;
+    document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
     render();
     renderActive();
   }catch(e){
@@ -496,9 +475,11 @@ function render(){
 
 function getFiltered(){
   const data=clean(allData);
-  if(activeTab==='raw')    return data.filter(s=>!isGraded(s.condition));
-  if(activeTab==='graded') return data.filter(s=>isGraded(s.condition));
-  if(activeTab==='psa10')  return data.filter(s=>getGrade(s)==='PSA 10');
+  if(gradeFilter==='raw')   return data.filter(s=>!isGraded(getGrade(s)));
+  if(gradeFilter==='psa10') return data.filter(s=>getGrade(s)==='PSA 10');
+  if(gradeFilter==='psa9')  return data.filter(s=>['PSA 9','PSA 9.5'].includes(getGrade(s)));
+  if(gradeFilter==='psa8')  return data.filter(s=>getGrade(s)==='PSA 8');
+  if(gradeFilter==='psa7')  return data.filter(s=>['PSA 7','PSA 6','PSA 5'].includes(getGrade(s)));
   return data;
 }
 
@@ -520,14 +501,7 @@ function renderTable(){
   }).join('');
 }
 
-function setTab(t,btn){
-  activeTab=t;
-  gradeFilter=null;
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  document.querySelectorAll('.gc').forEach(g=>g.classList.remove('active'));
-  renderTable();
-}
+
 
 function setGradeFilter(key){
   // Toggle - click same box again to deselect
