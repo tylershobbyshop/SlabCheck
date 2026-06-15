@@ -154,8 +154,6 @@ a{text-decoration:none;color:inherit;}
 .al-btn{background:var(--green);color:#000;font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;white-space:nowrap;transition:opacity 0.2s;}
 .al-btn:hover{opacity:0.85;}
 
-/* CHART */
-.chart-box{
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:12px;
@@ -163,7 +161,6 @@ a{text-decoration:none;color:inherit;}
   margin-bottom:12px;
   height:200px;
 }
-@media(min-width:600px){.chart-box{height:240px;}}
 
 /* TABS */
 .tabs{
@@ -353,7 +350,7 @@ const TRENDING = [
   {p:'Dylan Harper',s:'2025-26 Topps Chrome RC',pr:'$95',ch:'+15%',up:true,q:'2025-26 Topps Chrome Dylan Harper Rookie RC'},
 ];
 
-let allData=[], activeListings=[], activeTab='all', chartInst=null;
+let allData=[], activeListings=[], activeTab='all';
 
 // Render trending
 document.getElementById('trendGrid').innerHTML = TRENDING.map(t=>`
