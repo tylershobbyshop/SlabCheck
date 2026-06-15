@@ -296,9 +296,15 @@ footer a{color:var(--accent);}
 <div id="resultsPage">
   <div class="results-inner">
     <div class="results-label" id="rlabel"></div>
+    
+    <!-- Cheapest active listings -->
+    <div id="activeSection" style="display:none;margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:8px;">🛒 Cheapest Buy It Now Listings</div>
+      <div id="activeListings" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    
     <div class="grade-grid" id="gradeGrid"></div>
     <div class="chart-box"><canvas id="myChart"></canvas></div>
-
     <div class="tabs">
       <button class="tab-btn on" onclick="setTab('all',this)">All</button>
       <button class="tab-btn" onclick="setTab('raw',this)">Raw</button>
@@ -388,24 +394,23 @@ async function doSearch(){
   try{
     const res = await fetch(`${PROXY}/api/search?q=${encodeURIComponent(q)}`);
     const json = await res.json();
-    // Handle both array and {listings, cheapest} formats
     if(Array.isArray(json)){
       allData = json;
       activeListings = [];
     } else {
       allData = json.listings || [];
-      activeListings = json.cheapest || [];
+      activeListings = (json.cheapest || []).filter(i => !i.title.toLowerCase().includes('[digital]') && i.price >= 1.00);
     }
     if(!allData.length){
       document.getElementById('rlabel').innerHTML=`No results for <strong>"${q}"</strong>`;
       document.getElementById('gradeGrid').innerHTML='';
       document.getElementById('activeSection').style.display='none';
-      document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">No listings found. Try a different search.</div></td></tr>`;
+      document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">No listings found.</div></td></tr>`;
       return;
     }
     document.getElementById('rlabel').innerHTML=`<strong>${allData.length}</strong> listings for <strong>"${q}"</strong>`;
-    renderActive();
     render();
+    renderActive();
   }catch(e){
     document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">Error loading. Try again.</div></td></tr>`;
   }
@@ -421,9 +426,7 @@ function clean(data){
 function isGraded(c){
   return c && !['Raw','Ungraded','Used','','Brand new','New','Pre-owned'].includes(c);
 }
-
 function getGrade(item){
-  // Always check title first since eBay condition labels are generic
   const t = (item.title||'').toLowerCase();
   if(t.includes('psa 10')||t.includes('gem mint')) return 'PSA 10';
   if(t.includes('psa 9.5')) return 'PSA 9.5';
@@ -521,8 +524,7 @@ function renderTable(){
     return;
   }
   document.getElementById('tbody').innerHTML=rows.map(s=>{
-    const grade=getGrade(s);
-    const g=isGraded(grade);
+    const grade=getGrade(s);const g=isGraded(grade);
     return `<tr>
       <td class="tp">$${Number(s.price).toFixed(0)}</td>
       <td class="tt">${s.title}</td>
