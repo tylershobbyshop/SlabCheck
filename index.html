@@ -6,7 +6,6 @@
 <title>SlabCheck — Free Sports Card Price Tracker</title>
 <meta name="description" content="Free sports card price tracker. Search any card and see real eBay prices by grade. No subscription required.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root{
   --bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;
@@ -436,6 +435,9 @@ function getGrade(item){
   if(t.includes('psa 7')) return 'PSA 7';
   if(t.includes('psa 6')) return 'PSA 6';
   if(t.includes('psa 5')) return 'PSA 5';
+  if(t.includes('psa 7')) return 'PSA 7';
+  if(t.includes('psa 6')) return 'PSA 6';
+  if(t.includes('psa 5')) return 'PSA 5';
   if(t.includes('bgs 10')||t.includes('pristine')) return 'BGS 10';
   if(t.includes('bgs 9.5')) return 'BGS 9.5';
   if(t.includes('bgs 9')) return 'BGS 9';
@@ -489,28 +491,7 @@ function render(){
     gc('PSA 8',psa8,false)+
     gc('PSA 7 & Below',psa7,false);
 
-  // Chart
-  const sorted=[...data].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-40);
-  const ctx=document.getElementById('myChart').getContext('2d');
-  chartInst=new Chart(ctx,{
-    type:'line',
-    data:{
-      labels:sorted.map(s=>s.date.slice(5)),
-      datasets:[{
-        data:sorted.map(s=>s.price),
-        borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.07)',
-        borderWidth:2,pointRadius:2,fill:true,tension:0.3,
-      }]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`$${c.raw.toFixed(0)}`}}},
-      scales:{
-        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:10},maxTicksLimit:8}},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:10},callback:v=>'$'+v.toFixed(0)}}
-      }
-    }
-  });
+  // Chart removed - no sold data available yet
 
   renderTable();
 }

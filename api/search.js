@@ -60,7 +60,7 @@ function detectCondition(title) {
 
 function browseSearch(token, q, sort, limit) {
   return new Promise((resolve) => {
-    const path = `/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}`;
+    const path = `/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}&fieldgroups=EXTENDED`;
     const options = {
       hostname: 'api.ebay.com',
       path,
@@ -86,13 +86,22 @@ function browseSearch(token, q, sort, limit) {
 }
 
 function process(items) {
-  return items.map(item => ({
-    title:     item.title || '',
-    price:     parseFloat(item.price?.value || 0),
-    date:      (item.itemEndDate || new Date().toISOString()).split('T')[0],
-    condition: item.condition || detectCondition(item.title),
-    url:       item.itemWebUrl || '#',
-  })).filter(s => s.price > 0);
+  return items.map(item => {
+    // Prefer last sold price over current listing price
+    const soldPrice = parseFloat(item.lastSoldPrice?.value || 0);
+    const listPrice = parseFloat(item.price?.value || item.currentBidPrice?.value || 0);
+    const price = soldPrice > 0 ? soldPrice : listPrice;
+    // Prefer last sold date over listing end date
+    const soldDate = item.lastSoldDate || item.itemEndDate || new Date().toISOString();
+    return {
+      title:     item.title || '',
+      price,
+      date:      soldDate.split('T')[0],
+      condition: item.condition || detectCondition(item.title),
+      url:       item.itemWebUrl || '#',
+      isSold:    soldPrice > 0,
+    };
+  }).filter(s => s.price > 0);
 }
 
 module.exports = async (req, res) => {
