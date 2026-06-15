@@ -133,7 +133,7 @@ a{text-decoration:none;color:inherit;}
   gap:10px;
   margin-bottom:16px;
 }
-@media(min-width:500px){.grade-grid{grid-template-columns:repeat(4,1fr);}}
+@media(min-width:500px){.grade-grid{grid-template-columns:repeat(5,1fr);}}
 .gc{
   background:var(--surface);
   border:1px solid var(--border);
@@ -433,6 +433,9 @@ function getGrade(item){
   if(t.includes('psa 9.5')) return 'PSA 9.5';
   if(t.includes('psa 9')) return 'PSA 9';
   if(t.includes('psa 8')) return 'PSA 8';
+  if(t.includes('psa 7')) return 'PSA 7';
+  if(t.includes('psa 6')) return 'PSA 6';
+  if(t.includes('psa 5')) return 'PSA 5';
   if(t.includes('bgs 10')||t.includes('pristine')) return 'BGS 10';
   if(t.includes('bgs 9.5')) return 'BGS 9.5';
   if(t.includes('bgs 9')) return 'BGS 9';
@@ -461,7 +464,8 @@ function render(){
   const raw   = data.filter(s=>!isGraded(getGrade(s)));
   const psa10 = data.filter(s=>getGrade(s)==='PSA 10');
   const psa9  = data.filter(s=>['PSA 9','PSA 9.5'].includes(getGrade(s)));
-  const bgs   = data.filter(s=>['BGS 9.5','BGS 10'].includes(getGrade(s)));
+  const psa8  = data.filter(s=>getGrade(s)==='PSA 8');
+  const psa7  = data.filter(s=>['PSA 7','PSA 6','PSA 5'].includes(getGrade(s)));
 
   const avg = a=>a.length?a.reduce((x,b)=>x+b.price,0)/a.length:null;
   const lo  = a=>a.length?Math.min(...a.map(s=>s.price)):null;
@@ -479,10 +483,11 @@ function render(){
   };
 
   document.getElementById('gradeGrid').innerHTML =
-    gc('Raw / Ungraded',raw,false)+
-    gc('PSA 9 / 9.5',psa9,false)+
+    gc('Raw',raw,false)+
+    gc('PSA 9',psa9,false)+
     gc('PSA 10',psa10,true)+
-    gc('BGS 9.5 / 10',bgs,false);
+    gc('PSA 8',psa8,false)+
+    gc('PSA 7 & Below',psa7,false);
 
   // Chart
   const sorted=[...data].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-40);
@@ -514,7 +519,7 @@ function getFiltered(){
   const data=clean(allData);
   if(activeTab==='raw')    return data.filter(s=>!isGraded(s.condition));
   if(activeTab==='graded') return data.filter(s=>isGraded(s.condition));
-  if(activeTab==='psa10')  return data.filter(s=>s.condition==='PSA 10');
+  if(activeTab==='psa10')  return data.filter(s=>getGrade(s)==='PSA 10');
   return data;
 }
 
