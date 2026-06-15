@@ -1,80 +1,81 @@
 const https = require('https');
 
-function callClaude(query) {
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lukwsphqdorfxcmefrui.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1a3dzcGhxZG9yZnhjbWVmcnVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDk5MDIsImV4cCI6MjA5NzEyNTkwMn0.9ir4EGztOM8HXLQGXrQtm2NzUOeCQfAUQpduteMj-F0';
+
+function supabaseRequest(method, path, data) {
   return new Promise((resolve, reject) => {
-    const prompt = `You are a sports card price database. For the card search "${query}", generate realistic recent eBay sold listing data.
-
-Return ONLY a JSON array (no other text) with 20-30 items in this exact format:
-[
-  {"title": "exact card title", "price": 123.45, "date": "2026-06-10", "condition": "PSA 10", "url": "https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1"},
-  ...
-]
-
-Rules:
-- Use realistic prices based on actual card market values
-- Mix conditions: Raw, PSA 9, PSA 9.5, PSA 10, BGS 9.5
-- Dates should be within last 60 days
-- Prices should vary realistically by condition (PSA 10 worth more than raw)
-- Include realistic card titles with set names, card numbers, parallel names
-- If you don't recognize the card, estimate based on similar cards
-- Return ONLY the JSON array, nothing else`;
-
-    const body = JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }]
-    });
-
+    const url = new URL(SUPABASE_URL);
+    const body = data ? JSON.stringify(data) : null;
     const options = {
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
-      method: 'POST',
+      hostname: url.hostname,
+      path: `/rest/v1/${path}`,
+      method,
       headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-        'anthropic-version': '2023-06-01',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
+        'Prefer': 'return=representation',
       }
     };
+    if (body) options.headers['Content-Length'] = Buffer.byteLength(body);
 
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
+      let d = '';
+      res.on('data', c => d += c);
       res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const text = json.content?.[0]?.text || '[]';
-          const clean = text.replace(/```json|```/g, '').trim();
-          const results = JSON.parse(clean);
-          resolve(results);
-        } catch(e) {
-          reject(new Error('Parse error: ' + e.message));
-        }
+        try { resolve(JSON.parse(d)); }
+        catch(e) { resolve([]); }
       });
     });
     req.on('error', e => reject(e));
-    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
-    req.write(body);
+    if (body) req.write(body);
     req.end();
   });
 }
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=3600');
+  res.setHeader('Cache-Control', 's-maxage=60');
 
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: 'Query required' });
 
   try {
-    const listings = await callClaude(query);
+    const key = query.toLowerCase().trim();
 
-    const cheapest = [...listings]
-      .filter(i => !['lot','bundle'].some(w => (i.title||'').toLowerCase().includes(w)))
-      .sort((a,b) => a.price - b.price)
-      .slice(0, 5);
+    // Check if we have cached data in Supabase
+    const cached = await supabaseRequest(
+      'GET',
+      `card_prices?search_key=eq.${encodeURIComponent(key)}&order=sold_date.desc&limit=50`,
+    );
 
-    res.json({ listings, cheapest, query, total: listings.length });
+    if (cached && cached.length > 0) {
+      const listings = cached.map(r => ({
+        title: r.title,
+        price: r.price,
+        date: r.sold_date,
+        condition: r.condition,
+        url: r.url,
+      }));
+
+      const cheapest = [...listings]
+        .sort((a, b) => a.price - b.price)
+        .slice(0, 5);
+
+      return res.json({ listings, cheapest, query, total: listings.length, source: 'cache' });
+    }
+
+    // No data yet — return empty with a flag so frontend shows "no data yet" message
+    return res.json({
+      listings: [],
+      cheapest: [],
+      query,
+      total: 0,
+      source: 'empty',
+      message: 'No data yet for this card. Check back soon as our database builds up!'
+    });
+
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
