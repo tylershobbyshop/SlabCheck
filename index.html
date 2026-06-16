@@ -282,6 +282,14 @@ footer a{color:var(--accent);}
       <div class="results-label" id="rlabel"></div>
       <button id="soldBtn" onclick="loadSoldPrices()" style="display:none;background:var(--green);color:#000;border:none;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:7px 16px;border-radius:6px;cursor:pointer;">🏷 Load Sold Prices</button>
     </div>
+    <!-- Card image -->
+    <div id="cardImageWrap" style="display:none;margin-bottom:16px;display:flex;gap:16px;align-items:flex-start;">
+      <img id="cardImage" src="" alt="Card" style="width:120px;height:168px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:var(--surface);flex-shrink:0;">
+      <div style="flex:1;">
+        <div id="cardImageTitle" style="font-size:13px;font-weight:600;margin-bottom:6px;line-height:1.4;"></div>
+        <div id="cardImageSource" style="font-size:11px;color:var(--dim);">via CardSight AI</div>
+      </div>
+    </div>
     <div class="grade-grid" id="gradeGrid"></div>
     <div class="table-box">
       <table>
@@ -391,6 +399,16 @@ async function doSearch(){
     renderGrades();
     renderTable();
     renderActive();
+    // Show card image if available
+    const firstImage = allData.find(s => s.image);
+    const imgWrap = document.getElementById('cardImageWrap');
+    if(firstImage && firstImage.image && imgWrap){
+      document.getElementById('cardImage').src = firstImage.image;
+      document.getElementById('cardImageTitle').textContent = firstImage.title;
+      imgWrap.style.display = 'flex';
+    } else if(imgWrap) {
+      imgWrap.style.display = 'none';
+    }
     const sb2 = document.getElementById('soldBtn'); if(sb2) sb2.style.display='block';
   } catch(e){
     document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">Error loading prices. Try again.</div></td></tr>`;
@@ -491,9 +509,10 @@ function renderTable(){
     const grade = detectGrade(s);
     const g = isGraded(grade);
     const soldTag = s.isSold ? '<span style="font-size:9px;background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;">SOLD</span>' : '';
+    const thumb = s.image ? `<img src="${s.image}" style="width:32px;height:44px;object-fit:contain;border-radius:3px;vertical-align:middle;margin-right:6px;">` : '';
     return `<tr>
       <td class="tp">$${Number(s.price).toFixed(0)}${soldTag}</td>
-      <td class="tt">${s.title}</td>
+      <td class="tt">${thumb}${s.title}</td>
       <td class="td hide-sm">${(s.date||'').slice(5)}</td>
       <td><span class="cb ${g?'cb1':'cb0'}">${grade}</span></td>
       <td class="hide-sm"><a href="${s.url}" target="_blank" class="tl">View →</a></td>
