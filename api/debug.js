@@ -16,17 +16,19 @@ function httpsGet(hostname, path, headers) {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const q = req.query.q || 'wembanyama prizm silver rc';
+  
+  // Use the first card ID from previous test
+  const cardId = req.query.id || 'b1ad1c19-b247-4f40-a4d6-769417927a12';
 
-  const search = await httpsGet(
+  const pricing = await httpsGet(
     'api.cardsight.ai',
-    `/v1/catalog/search?q=${encodeURIComponent(q)}&limit=3`,
+    `/v1/pricing/${cardId}?period=90d&limit=10`,
     { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
   );
 
   res.json({
-    search_status: search.status,
-    search_body: search.body.substring(0, 500),
-    query: q
+    pricing_status: pricing.status,
+    pricing_body: pricing.body.substring(0, 1000),
+    card_id: cardId
   });
 };
