@@ -278,8 +278,10 @@ footer a{color:var(--accent);}
 <!-- RESULTS -->
 <div id="resultsPage">
   <div class="results-inner">
-    <div class="results-label" id="rlabel"></div>
-    
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div class="results-label" id="rlabel"></div>
+      <button id="soldBtn" onclick="loadSoldPrices()" style="display:none;background:var(--green);color:#000;border:none;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:7px 16px;border-radius:6px;cursor:pointer;">🏷 Load Sold Prices</button>
+    </div>
     <div class="grade-grid" id="gradeGrid"></div>
     <div class="table-box">
       <table>
