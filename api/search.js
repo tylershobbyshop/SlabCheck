@@ -127,7 +127,13 @@ async function getSoldFromSupabase(query) {
 
 async function getBrowseListings(query) {
   try {
-    const token = await getToken();
+    let token;
+    try {
+      token = await getToken();
+    } catch(tokenErr) {
+      console.error('Token error:', tokenErr.message);
+      return { listings: [], cheapest: [], tokenError: tokenErr.message };
+    }
     const q = encodeURIComponent(query);
     const [allRes, cheapRes] = await Promise.all([
       httpsGet('api.ebay.com', `/buy/browse/v1/item_summary/search?q=${q}&limit=50&sort=newlyListed&fieldgroups=EXTENDED`, {
@@ -202,8 +208,9 @@ module.exports = async (req, res) => {
     }
 
     // No sold data yet — return current listings from eBay Browse API
-    const { listings, cheapest } = await getBrowseListings(query);
-    res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed' });
+    const browseResult = await getBrowseListings(query);
+    const { listings, cheapest } = browseResult;
+    res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed', debug: browseResult.tokenError || null });
 
   } catch(e) {
     res.status(500).json({ error: e.message });
