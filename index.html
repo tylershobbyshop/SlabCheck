@@ -366,7 +366,7 @@ async function doSearch(){
   document.getElementById('rlabel').innerHTML = `Loading prices for <strong>"${q}"</strong>...`;
   document.getElementById('gradeGrid').innerHTML = '';
   document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading"><div class="spin"></div>Fetching prices...</div></td></tr>`;
-  document.getElementById('activeSection').style.display='none';
+  const as = document.getElementById('activeSection'); if(as) as.style.display='none';
   gradeFilter = null;
   document.querySelectorAll('[data-filter]').forEach(g=>g.classList.remove('active'));
   window.scrollTo({top:0,behavior:'smooth'});
@@ -387,11 +387,11 @@ async function doSearch(){
     }
     const dtype = json.dataType === 'sold' ? '✅ sold prices' : '📋 current listings';
     document.getElementById('rlabel').innerHTML = `<strong>${allData.length}</strong> ${dtype} for <strong>"${q}"</strong>`;
-    document.getElementById('soldBtn').style.display = json.dataType === 'sold' ? 'none' : 'block';
+    const sb = document.getElementById('soldBtn'); if(sb) sb.style.display = json.dataType === 'sold' ? 'none' : 'block';
     renderGrades();
     renderTable();
     renderActive();
-    document.getElementById('soldBtn').style.display='block';
+    const sb2 = document.getElementById('soldBtn'); if(sb2) sb2.style.display='block';
   } catch(e){
     document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">Error loading prices. Try again.</div></td></tr>`;
   }
