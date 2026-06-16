@@ -385,7 +385,7 @@ async function doSearch(){
       document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">No listings found. Try a different search.</div></td></tr>`;
       return;
     }
-    const dtype = json.dataType === 'sold' ? '✅ sold prices' : '📋 current listings';
+    const dtype = json.dataType === 'cardsight' ? '✅ real market data' : json.dataType === 'sold' ? '✅ sold prices' : '📋 current listings';
     document.getElementById('rlabel').innerHTML = `<strong>${allData.length}</strong> ${dtype} for <strong>"${q}"</strong>`;
     const sb = document.getElementById('soldBtn'); if(sb) sb.style.display = json.dataType === 'sold' ? 'none' : 'block';
     renderGrades();
@@ -490,8 +490,9 @@ function renderTable(){
   document.getElementById('tbody').innerHTML = rows.map(s=>{
     const grade = detectGrade(s);
     const g = isGraded(grade);
+    const soldTag = s.isSold ? '<span style="font-size:9px;background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;">SOLD</span>' : '';
     return `<tr>
-      <td class="tp">$${Number(s.price).toFixed(0)}</td>
+      <td class="tp">$${Number(s.price).toFixed(0)}${soldTag}</td>
       <td class="tt">${s.title}</td>
       <td class="td hide-sm">${(s.date||'').slice(5)}</td>
       <td><span class="cb ${g?'cb1':'cb0'}">${grade}</span></td>
