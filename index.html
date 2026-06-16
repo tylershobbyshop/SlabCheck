@@ -385,7 +385,9 @@ async function doSearch(){
       document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">No listings found. Try a different search.</div></td></tr>`;
       return;
     }
-    document.getElementById('rlabel').innerHTML = `<strong>${allData.length}</strong> listings for <strong>"${q}"</strong>`;
+    const dtype = json.dataType === 'sold' ? '✅ sold prices' : '📋 current listings';
+    document.getElementById('rlabel').innerHTML = `<strong>${allData.length}</strong> ${dtype} for <strong>"${q}"</strong>`;
+    document.getElementById('soldBtn').style.display = json.dataType === 'sold' ? 'none' : 'block';
     renderGrades();
     renderTable();
     renderActive();
