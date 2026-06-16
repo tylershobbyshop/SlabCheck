@@ -387,6 +387,7 @@ async function doSearch(){
     renderGrades();
     renderTable();
     renderActive();
+    document.getElementById('soldBtn').style.display='block';
   } catch(e){
     document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">Error loading prices. Try again.</div></td></tr>`;
   }
@@ -506,6 +507,42 @@ function renderActive(){
       <div class="al-price">$${Number(item.price).toFixed(0)}</div>
       <a href="${item.url}" target="_blank" class="al-btn">Buy →</a>
     </div>`).join('');
+}
+
+async function loadSoldPrices(){
+  const btn = document.getElementById('soldBtn');
+  btn.textContent = '⏳ Loading...';
+  btn.disabled = true;
+
+  // Get up to 8 item URLs from current results
+  const urls = clean(allData)
+    .slice(0, 8)
+    .map(i => encodeURIComponent(i.url))
+    .join(',');
+
+  try {
+    const res = await fetch(`${PROXY}/api/sold?urls=${urls}`);
+    const data = await res.json();
+    const results = data.results || [];
+
+    if (!results.length) {
+      btn.textContent = '❌ No sold data found';
+      setTimeout(() => { btn.textContent = '🏷 Load Sold Prices'; btn.disabled = false; }, 2000);
+      return;
+    }
+
+    // Replace allData with sold results
+    allData = results;
+    document.getElementById('rlabel').innerHTML = `<strong>${results.length}</strong> sold prices loaded`;
+    renderGrades();
+    renderTable();
+    btn.textContent = `✅ ${results.length} sold prices`;
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#fff';
+  } catch(e) {
+    btn.textContent = '❌ Error - try again';
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
