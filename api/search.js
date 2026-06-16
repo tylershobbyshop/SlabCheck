@@ -1,56 +1,54 @@
 const https = require('https');
 
-// ── eBay Browse API (current listings) ───────────────────────
+const CARDSIGHT_KEY = process.env.CARDSIGHT_KEY || '2955a9e7596c45d8809161768acafed9';
+
+// Fallback eBay creds
 const _a = Buffer.from('VHlsZXJzSG8tTXlDYXJkVG8tUFJELTc2NGIxZDZmYy0zNDY4NTIwNQ==','base64').toString();
 const _b = Buffer.from('UFJELTY0YjFkNmZjYjJhYS03N2Y4LTRjYjYtODY2Ni0xNWFl','base64').toString();
-const EBAY_APP_ID  = ((process.env||{}).EBAY_APP_ID  || '').trim() || _a;
-const EBAY_CERT_ID = ((process.env||{}).EBAY_CERT_ID || '').trim() || _b;
+const EBAY_APP_ID  = ((process.env||{}).EBAY_APP_ID  ||'').trim() || _a;
+const EBAY_CERT_ID = ((process.env||{}).EBAY_CERT_ID ||'').trim() || _b;
 
-// ── Supabase ──────────────────────────────────────────────────
-const SUPABASE_URL = (process.env||{}).SUPABASE_URL || 'https://lukwsphqdorfxcmefrui.supabase.co';
-const SUPABASE_KEY = (process.env||{}).SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1a3dzcGhxZG9yZnhjbWVmcnVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDk5MDIsImV4cCI6MjA5NzEyNTkwMn0.9ir4EGztOM8HXLQGXrQtm2NzUOeCQfAUQpduteMj-F0';
+let ebayToken = null, ebayExpiry = 0;
 
-// ── Mac listener URL (ngrok tunnel) ──────────────────────────
-const MAC_LISTENER = (process.env||{}).MAC_LISTENER || '';
-
-let cachedToken = null;
-let tokenExpiry = 0;
-
-function getToken() {
-  return new Promise((resolve, reject) => {
-    if (cachedToken && Date.now() < tokenExpiry) return resolve(cachedToken);
-    const creds = Buffer.from(`${EBAY_APP_ID}:${EBAY_CERT_ID}`).toString('base64');
-    const body  = 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope';
-    const options = {
-      hostname: 'api.ebay.com',
-      path: '/identity/v1/oauth2/token',
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${creds}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(body),
-      }
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (!json.access_token) throw new Error('No token: ' + JSON.stringify(json).substring(0,100));
-          cachedToken = json.access_token;
-          tokenExpiry = Date.now() + (json.expires_in - 60) * 1000;
-          resolve(cachedToken);
-        } catch(e) { reject(e); }
-      });
+function httpsGet(hostname, path, headers) {
+  return new Promise((resolve) => {
+    const req = https.request({ hostname, path, method:'GET', headers }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve(null); } });
     });
-    req.on('error', e => reject(e));
-    req.write(body);
+    req.on('error', () => resolve(null));
+    req.setTimeout(8000, () => { req.destroy(); resolve(null); });
     req.end();
   });
 }
 
-function detectCondition(title) {
+async function getEbayToken() {
+  if (ebayToken && Date.now() < ebayExpiry) return ebayToken;
+  return new Promise((resolve, reject) => {
+    const creds = Buffer.from(`${EBAY_APP_ID}:${EBAY_CERT_ID}`).toString('base64');
+    const body  = 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope';
+    const req = https.request({
+      hostname: 'api.ebay.com', path: '/identity/v1/oauth2/token', method: 'POST',
+      headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) }
+    }, (res) => {
+      let d = ''; res.on('data', c => d += c);
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          if (!j.access_token) throw new Error('No token');
+          ebayToken = j.access_token;
+          ebayExpiry = Date.now() + (j.expires_in - 60) * 1000;
+          resolve(ebayToken);
+        } catch(e) { reject(e); }
+      });
+    });
+    req.on('error', e => reject(e));
+    req.write(body); req.end();
+  });
+}
+
+function detectGrade(title) {
   const t = (title||'').toLowerCase();
   if (t.includes('psa 10')||t.includes('gem mint')) return 'PSA 10';
   if (t.includes('psa 9.5')) return 'PSA 9.5';
@@ -65,104 +63,67 @@ function detectCondition(title) {
   return 'Raw';
 }
 
-function httpsGet(hostname, path, headers) {
-  return new Promise((resolve) => {
-    const options = { hostname, path, method: 'GET', headers };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch(e) { resolve(null); }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.setTimeout(6000, () => { req.destroy(); resolve(null); });
-    req.end();
-  });
-}
-
-function httpPost(url, body) {
-  return new Promise((resolve) => {
-    try {
-      const u = new URL(url);
-      const options = {
-        hostname: u.hostname,
-        path: u.pathname + u.search,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-      };
-      const req = https.request(options, (res) => {
-        res.on('data', () => {});
-        res.on('end', () => resolve(true));
-      });
-      req.on('error', () => resolve(false));
-      req.setTimeout(3000, () => { req.destroy(); resolve(false); });
-      req.write(body);
-      req.end();
-    } catch(e) { resolve(false); }
-  });
-}
-
-async function getSoldFromSupabase(query) {
-  const key = encodeURIComponent(query.toLowerCase().trim());
-  const result = await httpsGet(
-    'lukwsphqdorfxcmefrui.supabase.co',
-    `/rest/v1/sold_prices?search_key=eq.${key}&order=sold_date.desc&limit=50`,
-    {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-    }
+async function searchCardSight(query) {
+  // Step 1: search catalog for card ID
+  const search = await httpsGet(
+    'api.cardsight.ai',
+    `/v1/catalog/search?q=${encodeURIComponent(query)}&limit=5`,
+    { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
   );
-  if (!Array.isArray(result) || !result.length) return null;
-  return result.map(r => ({
-    title: r.title,
-    price: r.price,
-    date: r.sold_date,
-    condition: r.condition,
-    url: r.url || '#',
+
+  if (!search || search.error) return null;
+
+  const cards = search.cards || search.results || search.data || [];
+  if (!cards.length) return null;
+
+  // Step 2: get pricing for top card match
+  const cardId = cards[0].id || cards[0].card_id;
+  if (!cardId) return null;
+
+  const pricing = await httpsGet(
+    'api.cardsight.ai',
+    `/v1/pricing/${cardId}?period=90d&limit=50`,
+    { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
+  );
+
+  if (!pricing || pricing.error) return null;
+
+  const sales = pricing.sales || pricing.results || pricing.data || [];
+  if (!sales.length) return null;
+
+  return sales.map(s => ({
+    title: s.title || cards[0].name || query,
+    price: parseFloat(s.price || s.sale_price || s.amount || 0),
+    date: (s.date || s.sold_date || s.end_date || '').split('T')[0] || new Date().toISOString().split('T')[0],
+    condition: s.grade || s.condition || detectGrade(s.title || ''),
+    url: s.url || s.source_url || '#',
     isSold: true,
-  }));
+  })).filter(s => s.price > 0);
 }
 
-async function getBrowseListings(query) {
+async function getEbayListings(query) {
   try {
-    let token;
-    try {
-      token = await getToken();
-    } catch(tokenErr) {
-      console.error('Token error:', tokenErr.message);
-      return { listings: [], cheapest: [], tokenError: tokenErr.message };
-    }
+    const token = await getEbayToken();
     const q = encodeURIComponent(query);
     const [allRes, cheapRes] = await Promise.all([
-      httpsGet('api.ebay.com', `/buy/browse/v1/item_summary/search?q=${q}&limit=50&sort=newlyListed&fieldgroups=EXTENDED`, {
-        'Authorization': `Bearer ${token}`,
-        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
-        'Accept': 'application/json',
+      httpsGet('api.ebay.com', `/buy/browse/v1/item_summary/search?q=${q}&limit=50&sort=newlyListed`, {
+        'Authorization': `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US', 'Accept': 'application/json'
       }),
       httpsGet('api.ebay.com', `/buy/browse/v1/item_summary/search?q=${q}&limit=10&sort=price`, {
-        'Authorization': `Bearer ${token}`,
-        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
-        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US', 'Accept': 'application/json'
       }),
     ]);
 
     const process = items => (items||[]).map(item => ({
-      title: item.title || '',
-      price: parseFloat(item.price?.value || 0),
-      date: (item.itemEndDate || new Date().toISOString()).split('T')[0],
-      condition: item.condition || detectCondition(item.title),
-      url: item.itemWebUrl || '#',
-      isSold: false,
-    })).filter(s => s.price > 0);
+      title: item.title||'', price: parseFloat(item.price?.value||0),
+      date: (item.itemEndDate||new Date().toISOString()).split('T')[0],
+      condition: item.condition||detectGrade(item.title), url: item.itemWebUrl||'#', isSold: false,
+    })).filter(s => s.price > 0 && !s.title.toLowerCase().includes('[digital]'));
 
-    const listings = process((allRes||{}).itemSummaries).filter(i => !i.title.toLowerCase().includes('[digital]'));
-    const cheapest = process((cheapRes||{}).itemSummaries)
-      .filter(i => !i.title.toLowerCase().includes('[digital]') && i.price >= 1
-        && !['lot','bundle','master set'].some(w => i.title.toLowerCase().includes(w)))
-      .sort((a,b) => a.price - b.price)
-      .slice(0, 5);
+    const listings = process((allRes||{}).itemSummaries||[]);
+    const cheapest = process((cheapRes||{}).itemSummaries||[])
+      .filter(i => i.price >= 1 && !['lot','bundle','master set'].some(w => i.title.toLowerCase().includes(w)))
+      .sort((a,b) => a.price - b.price).slice(0,5);
 
     return { listings, cheapest };
   } catch(e) {
@@ -170,47 +131,27 @@ async function getBrowseListings(query) {
   }
 }
 
-async function pingMacListener(query) {
-  if (!MAC_LISTENER) return;
-  try {
-    await httpPost(`${MAC_LISTENER}/scrape?q=${encodeURIComponent(query)}`, '{}');
-  } catch(e) {}
-}
-
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=120');
+  res.setHeader('Cache-Control', 's-maxage=300');
 
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: 'Query required' });
 
   try {
-    // Ping Mac listener in background (don't wait)
-    pingMacListener(query);
-
-    // Check Supabase for sold data first
-    const soldData = await getSoldFromSupabase(query);
+    // Try CardSight for real sold data first
+    const soldData = await searchCardSight(query);
 
     if (soldData && soldData.length > 0) {
-      // We have sold data — return it
       const cheapest = [...soldData]
-        .filter(i => !['lot','bundle','master set'].some(w => i.title.toLowerCase().includes(w)))
-        .sort((a,b) => a.price - b.price)
-        .slice(0, 5);
-
-      return res.json({
-        listings: soldData,
-        cheapest,
-        query,
-        total: soldData.length,
-        dataType: 'sold',
-      });
+        .filter(i => !['lot','bundle'].some(w => i.title.toLowerCase().includes(w)))
+        .sort((a,b) => a.price - b.price).slice(0,5);
+      return res.json({ listings: soldData, cheapest, query, total: soldData.length, dataType: 'sold' });
     }
 
-    // No sold data yet — return current listings from eBay Browse API
-    const browseResult = await getBrowseListings(query);
-    const { listings, cheapest } = browseResult;
-    res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed', debug: browseResult.tokenError || null });
+    // Fall back to eBay Browse API (current listings)
+    const { listings, cheapest } = await getEbayListings(query);
+    res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed' });
 
   } catch(e) {
     res.status(500).json({ error: e.message });
