@@ -3,8 +3,8 @@ const https = require('https');
 // ── eBay Browse API (current listings) ───────────────────────
 const _a = Buffer.from('VHlsZXJzSG8tTXlDYXJkVG8tUFJELTc2NGIxZDZmYy0zNDY4NTIwNQ==','base64').toString();
 const _b = Buffer.from('UFJELTY0YjFkNmZjYjJhYS03N2Y4LTRjYjYtODY2Ni0xNWFl','base64').toString();
-const EBAY_APP_ID  = (process.env||{}).EBAY_APP_ID  || _a;
-const EBAY_CERT_ID = (process.env||{}).EBAY_CERT_ID || _b;
+const EBAY_APP_ID  = ((process.env||{}).EBAY_APP_ID  || '').trim() || _a;
+const EBAY_CERT_ID = ((process.env||{}).EBAY_CERT_ID || '').trim() || _b;
 
 // ── Supabase ──────────────────────────────────────────────────
 const SUPABASE_URL = (process.env||{}).SUPABASE_URL || 'https://lukwsphqdorfxcmefrui.supabase.co';
@@ -37,7 +37,7 @@ function getToken() {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (!json.access_token) throw new Error('No token');
+          if (!json.access_token) throw new Error('No token: ' + JSON.stringify(json).substring(0,100));
           cachedToken = json.access_token;
           tokenExpiry = Date.now() + (json.expires_in - 60) * 1000;
           resolve(cachedToken);
