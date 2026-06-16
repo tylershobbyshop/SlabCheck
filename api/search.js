@@ -1,8 +1,6 @@
 const https = require('https');
 
 const CARDSIGHT_KEY = process.env.CARDSIGHT_KEY || '2955a9e7596c45d8809161768acafed9';
-
-// Fallback eBay creds
 const _a = Buffer.from('VHlsZXJzSG8tTXlDYXJkVG8tUFJELTc2NGIxZDZmYy0zNDY4NTIwNQ==','base64').toString();
 const _b = Buffer.from('UFJELTY0YjFkNmZjYjJhYS03N2Y4LTRjYjYtODY2Ni0xNWFl','base64').toString();
 const EBAY_APP_ID  = ((process.env||{}).EBAY_APP_ID  ||'').trim() || _a;
@@ -64,19 +62,18 @@ function detectGrade(title) {
 }
 
 async function searchCardSight(query) {
-  // Step 1: search catalog for card ID
+  // Step 1: search catalog
   const search = await httpsGet(
     'api.cardsight.ai',
     `/v1/catalog/search?q=${encodeURIComponent(query)}&limit=5`,
     { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
   );
 
-  if (!search || search.error) return null;
-
-  const cards = search.cards || search.results || search.data || [];
+  if (!search) return null;
+  const cards = search.results || search.cards || [];
   if (!cards.length) return null;
 
-  // Step 2: get pricing for top card match
+  // Step 2: get pricing for top match
   const cardId = cards[0].id || cards[0].card_id;
   if (!cardId) return null;
 
@@ -86,19 +83,24 @@ async function searchCardSight(query) {
     { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
   );
 
-  if (!pricing || pricing.error) return null;
+  if (!pricing) return null;
 
-  const sales = pricing.sales || pricing.results || pricing.data || [];
-  if (!sales.length) return null;
+  // Response format: pricing.raw.records
+  const records = pricing.raw?.records || pricing.records || pricing.sales || [];
+  if (!records.length) return null;
 
-  return sales.map(s => ({
-    title: s.title || cards[0].name || query,
-    price: parseFloat(s.price || s.sale_price || s.amount || 0),
-    date: (s.date || s.sold_date || s.end_date || '').split('T')[0] || new Date().toISOString().split('T')[0],
-    condition: s.grade || s.condition || detectGrade(s.title || ''),
-    url: s.url || s.source_url || '#',
-    isSold: true,
-  })).filter(s => s.price > 0);
+  const cardName = pricing.card?.name || cards[0].name || '';
+  const setInfo  = pricing.card?.set ? `${pricing.card.set.year} ${pricing.card.set.release} #${pricing.card.number}` : '';
+
+  return records.map(r => ({
+    title:     r.title || `${setInfo} ${cardName}`,
+    price:     parseFloat(r.price || 0),
+    date:      (r.date || '').split('T')[0] || new Date().toISOString().split('T')[0],
+    condition: r.grade || r.condition || detectGrade(r.title || ''),
+    url:       r.url || '#',
+    isSold:    r.listing_type === 'auction' || r.listing_type === 'sold',
+    source:    r.source || 'cardsight',
+  })).filter(r => r.price > 0);
 }
 
 async function getEbayListings(query) {
@@ -139,17 +141,17 @@ module.exports = async (req, res) => {
   if (!query) return res.status(400).json({ error: 'Query required' });
 
   try {
-    // Try CardSight for real sold data first
-    const soldData = await searchCardSight(query);
+    // Try CardSight for real market data first
+    const csData = await searchCardSight(query);
 
-    if (soldData && soldData.length > 0) {
-      const cheapest = [...soldData]
+    if (csData && csData.length > 0) {
+      const cheapest = [...csData]
         .filter(i => !['lot','bundle'].some(w => i.title.toLowerCase().includes(w)))
         .sort((a,b) => a.price - b.price).slice(0,5);
-      return res.json({ listings: soldData, cheapest, query, total: soldData.length, dataType: 'sold' });
+      return res.json({ listings: csData, cheapest, query, total: csData.length, dataType: 'cardsight' });
     }
 
-    // Fall back to eBay Browse API (current listings)
+    // Fall back to eBay Browse API
     const { listings, cheapest } = await getEbayListings(query);
     res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed' });
 
