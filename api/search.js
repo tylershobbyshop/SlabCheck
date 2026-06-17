@@ -46,8 +46,8 @@ async function getEbayToken() {
   });
 }
 
-function detectGrade(title) {
-  const t = (title||'').toLowerCase();
+function detectGrade(input) {
+  const t = (typeof input === 'string' ? input : input?.title || '').toLowerCase();
   if (t.includes('psa 10')||t.includes('gem mint')) return 'PSA 10';
   if (t.includes('psa 9.5')) return 'PSA 9.5';
   if (t.includes('psa 9')) return 'PSA 9';
@@ -62,46 +62,73 @@ function detectGrade(title) {
 }
 
 async function searchCardSight(query) {
-  // Step 1: search catalog
+  // Extract year from query e.g. "2023-24" or "2024"
+  const yearMatch = query.match(/20(\d{2})(?:-(\d{2}))?/);
+  const queryYear = yearMatch ? yearMatch[0] : null;
+
+  // Step 1: search catalog with up to 20 results
   const search = await httpsGet(
     'api.cardsight.ai',
-    `/v1/catalog/search?q=${encodeURIComponent(query)}&limit=5`,
+    `/v1/catalog/search?q=${encodeURIComponent(query)}&limit=20`,
     { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
   );
 
   if (!search) return null;
-  const cards = search.results || search.cards || [];
+  let cards = search.results || search.cards || [];
   if (!cards.length) return null;
 
-  // Step 2: get pricing for top match
-  const cardId = cards[0].id || cards[0].card_id;
-  if (!cardId) return null;
+  // Filter by year if found in query
+  if (queryYear) {
+    const yearFiltered = cards.filter(c => c.year === queryYear);
+    if (yearFiltered.length) cards = yearFiltered;
+  }
 
-  const pricing = await httpsGet(
-    'api.cardsight.ai',
-    `/v1/pricing/${cardId}?period=90d&limit=50`,
-    { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
+  // Try top 3 card IDs and combine results
+  const topIds = cards.slice(0, 3).map(c => c.id || c.card_id).filter(Boolean);
+  if (!topIds.length) return null;
+
+  const pricingResults = await Promise.all(
+    topIds.map(id => httpsGet(
+      'api.cardsight.ai',
+      `/v1/pricing/${id}?period=90d&limit=30`,
+      { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
+    ))
   );
 
-  if (!pricing) return null;
+  // Collect all records from all matched cards
+  let allRecords = [];
+  let bestImage = null;
 
-  // Response format: pricing.raw.records
-  const records = pricing.raw?.records || pricing.records || pricing.sales || [];
-  if (!records.length) return null;
+  for (const pricing of pricingResults) {
+    if (!pricing) continue;
+    const records = pricing.raw?.records || pricing.records || pricing.sales || [];
+    const cardName = pricing.card?.name || '';
+    const setInfo  = pricing.card?.set ? `${pricing.card.set.year} ${pricing.card.set.release} #${pricing.card.number}` : '';
 
-  const cardName = pricing.card?.name || cards[0].name || '';
-  const setInfo  = pricing.card?.set ? `${pricing.card.set.year} ${pricing.card.set.release} #${pricing.card.number}` : '';
+    for (const r of records) {
+      // Prefer PSA 10 image
+      if (r.image_url && (!bestImage || r.title?.toLowerCase().includes('psa 10'))) {
+        bestImage = r.image_url;
+      }
+      allRecords.push({
+        title:     r.title || `${setInfo} ${cardName}`,
+        price:     parseFloat(r.price || 0),
+        date:      (r.date || '').split('T')[0] || new Date().toISOString().split('T')[0],
+        condition: detectGrade({title: r.title || ''}) !== 'Raw' ? detectGrade({title: r.title || ''}) : (r.grade || r.condition || 'Raw'),
+        url:       r.url || '#',
+        image:     r.image_url || null,
+        isSold:    r.listing_type === 'auction' || r.listing_type === 'sold',
+        source:    r.source || 'cardsight',
+      });
+    }
+  }
 
-  return records.map(r => ({
-    title:     r.title || `${setInfo} ${cardName}`,
-    price:     parseFloat(r.price || 0),
-    date:      (r.date || '').split('T')[0] || new Date().toISOString().split('T')[0],
-    condition: r.grade || r.condition || detectGrade(r.title || ''),
-    url:       r.url || '#',
-    image:     r.image_url || null,
-    isSold:    r.listing_type === 'auction' || r.listing_type === 'sold',
-    source:    r.source || 'cardsight',
-  })).filter(r => r.price > 0);
+  if (!allRecords.length) return null;
+
+  // Inject best image into first record
+  if (bestImage && allRecords.length) allRecords[0].image = bestImage;
+
+  return allRecords.filter(r => r.price > 0);
 }
 
 async function getEbayListings(query) {
