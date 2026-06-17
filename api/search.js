@@ -83,6 +83,24 @@ async function searchCardSight(query) {
     if (yearFiltered.length) cards = yearFiltered;
   }
 
+  // Score cards by how well they match query terms
+  const qLower = query.toLowerCase();
+  const qWords = qLower.split(/\s+/).filter(w => w.length > 2);
+  
+  cards = cards.map(c => {
+    const cStr = `${c.year||''} ${c.releaseName||''} ${c.setName||''} ${c.parallelName||''} ${c.name||''} ${c.number||''}`.toLowerCase();
+    let score = c.relevance || 0;
+    // Boost if set name matches (Base Set = better for RC searches)
+    if ((c.setName||'').toLowerCase() === 'base set') score += 2;
+    // Boost parallel match
+    if (qLower.includes('silver') && (c.parallelName||'').toLowerCase().includes('silver')) score += 3;
+    if (qLower.includes('gold') && (c.parallelName||'').toLowerCase().includes('gold')) score += 3;
+    // Penalize insert sets when searching for base
+    const insertSets = ['deep space','dominance','fireworks','fractal','kaleidoscopic','global reach','talismen','instant impact','rising stars'];
+    if (insertSets.some(s => (c.setName||'').toLowerCase().includes(s))) score -= 2;
+    return { ...c, _score: score };
+  }).sort((a,b) => b._score - a._score);
+
   // Try top 3 card IDs and combine results
   const topIds = cards.slice(0, 3).map(c => c.id || c.card_id).filter(Boolean);
   if (!topIds.length) return null;
