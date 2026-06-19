@@ -101,7 +101,7 @@ function httpGet(hostname, path, cookieHeader) {
       res.on('end', () => resolve({ body: data, headers: res.headers, status: res.statusCode }));
     });
     req.on('error', reject);
-    req.setTimeout(9000, () => { req.destroy(); reject(new Error('timeout')); });
+    req.setTimeout(6000, () => { req.destroy(); reject(new Error('timeout')); });
     req.end();
   });
 }
@@ -109,18 +109,8 @@ function httpGet(hostname, path, cookieHeader) {
 // ── Scrape eBay's own SOLD listings search page ──
 async function scrapeSold(query) {
   const q = encodeURIComponent(query);
-
-  // Warm a session first — a bare request with no cookies is more likely
-  // to get an interstitial / stripped-down page.
-  let cookieHeader = '';
-  try {
-    const home = await httpGet('www.ebay.com', '/');
-    const setCookies = home.headers['set-cookie'] || [];
-    cookieHeader = setCookies.map(c => c.split(';')[0]).join('; ');
-  } catch (e) { /* non-fatal, continue without cookies */ }
-
   const path = `/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1&_ipg=60&_sop=13`;
-  const res = await httpGet('www.ebay.com', path, cookieHeader);
+  const res = await httpGet('www.ebay.com', path);
 
   if (res.status !== 200) {
     throw new Error(`eBay returned status ${res.status}`);
@@ -234,10 +224,25 @@ module.exports = async (req, res) => {
   let listings = [];
   let source = 'live-scrape';
 
-  try {
-    listings = await scrapeSold(query);
-  } catch (e) {
-    console.error('Scrape failed:', e.message);
+  // Run the sold-comp scrape and the active-listings fetch in parallel —
+  // they're independent, and chaining them sequentially is what was likely
+  // blowing past Vercel's ~10s function time limit and causing the timeout.
+  const [scrapeResult, cheapestResult] = await Promise.allSettled([
+    scrapeSold(query),
+    (async () => {
+      const token = await getToken();
+      const cheapItems = await browseSearch(token, query, 'price', 10);
+      return processBrowse(cheapItems)
+        .filter(i => !['lot','bundle','master set','collection'].some(w => i.title.toLowerCase().includes(w)))
+        .sort((a,b) => a.price - b.price)
+        .slice(0, 5);
+    })(),
+  ]);
+
+  if (scrapeResult.status === 'fulfilled') {
+    listings = scrapeResult.value;
+  } else {
+    console.error('Scrape failed:', scrapeResult.reason?.message);
   }
 
   if (!listings.length) {
@@ -245,18 +250,9 @@ module.exports = async (req, res) => {
     source = 'demo-fallback';
   }
 
-  // Active "cheapest right now" listings — Browse API, unrelated to the
-  // sold-comp scrape above, so failures here don't block sold results.
-  let cheapest = [];
-  try {
-    const token = await getToken();
-    const cheapItems = await browseSearch(token, query, 'price', 10);
-    cheapest = processBrowse(cheapItems)
-      .filter(i => !['lot','bundle','master set','collection'].some(w => i.title.toLowerCase().includes(w)))
-      .sort((a,b) => a.price - b.price)
-      .slice(0, 5);
-  } catch (e) {
-    console.error('Browse (cheapest) failed:', e.message);
+  const cheapest = cheapestResult.status === 'fulfilled' ? cheapestResult.value : [];
+  if (cheapestResult.status === 'rejected') {
+    console.error('Browse (cheapest) failed:', cheapestResult.reason?.message);
   }
 
   res.json({ listings, cheapest, query, total: listings.length, source });
