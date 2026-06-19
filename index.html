@@ -467,10 +467,10 @@ function render(){
   const lo  = a=>a.length?Math.min(...a.map(s=>s.price)):null;
   const hi  = a=>a.length?Math.max(...a.map(s=>s.price)):null;
 
-  const gc=(label,arr,star)=>{
+  const gc=(label,arr,star,tab)=>{
     const a=avg(arr);
-    if(!a) return `<div class="gc${star?' star':''}"><div class="gc-label">${label}</div><div class="gc-na">—</div></div>`;
-    return `<div class="gc${star?' star':''}">
+    if(!a) return `<div class="gc${star?' star':''}" onclick="setTab('${tab}')" style="cursor:pointer;"><div class="gc-label">${label}</div><div class="gc-na">—</div></div>`;
+    return `<div class="gc${star?' star':''}" onclick="setTab('${tab}')" style="cursor:pointer;">
       <div class="gc-label">${label}</div>
       <div class="gc-price">$${a.toFixed(0)}</div>
       <div class="gc-range">$${lo(arr).toFixed(0)} – $${hi(arr).toFixed(0)}</div>
@@ -479,10 +479,10 @@ function render(){
   };
 
   document.getElementById('gradeGrid').innerHTML =
-    gc('Raw / Ungraded',raw,false)+
-    gc('PSA 9 / 9.5',psa9,false)+
-    gc('PSA 10',psa10,true)+
-    gc('BGS 9.5 / 10',bgs,false);
+    gc('Raw / Ungraded',raw,false,'raw')+
+    gc('PSA 9 / 9.5',psa9,false,'psa9')+
+    gc('PSA 10',psa10,true,'psa10')+
+    gc('BGS 9.5 / 10',bgs,false,'bgs');
 
   // Chart
   const sorted=[...data].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-40);
@@ -514,7 +514,9 @@ function getFiltered(){
   const data=clean(allData);
   if(activeTab==='raw')    return data.filter(s=>!isGraded(s.condition));
   if(activeTab==='graded') return data.filter(s=>isGraded(s.condition));
-  if(activeTab==='psa10')  return data.filter(s=>s.condition==='PSA 10');
+  if(activeTab==='psa10')  return data.filter(s=>getGrade(s)==='PSA 10');
+  if(activeTab==='psa9')   return data.filter(s=>['PSA 9','PSA 9.5'].includes(getGrade(s)));
+  if(activeTab==='bgs')    return data.filter(s=>['BGS 9.5','BGS 10'].includes(getGrade(s)));
   return data;
 }
 
@@ -543,7 +545,10 @@ function renderTable(){
 function setTab(t,btn){
   activeTab=t;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
+  if(!btn){
+    btn = Array.from(document.querySelectorAll('.tab-btn')).find(b=>b.getAttribute('onclick').includes(`setTab('${t}'`));
+  }
+  if(btn) btn.classList.add('on');
   renderTable();
 }
 </script>
