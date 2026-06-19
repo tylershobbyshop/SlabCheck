@@ -145,12 +145,23 @@ async function scrapeSold(query) {
     const linkMatch = block.match(/class="s-item__link"\s+href="([^"]+)"/);
     const url = linkMatch ? linkMatch[1] : '#';
 
+    // Thumbnail image
+    const imgTagMatch = block.match(/<img[^>]*class="s-item__image-img"[^>]*>/);
+    let image = '';
+    if (imgTagMatch) {
+      const tag = imgTagMatch[0];
+      const dataSrcMatch = tag.match(/data-src="([^"]+)"/);
+      const srcMatch = tag.match(/\ssrc="([^"]+)"/);
+      image = (dataSrcMatch && dataSrcMatch[1]) || (srcMatch && srcMatch[1]) || '';
+    }
+
     sales.push({
       title,
       price,
       date: soldDate,
       condition: detectCondition(title),
       url,
+      image,
     });
   }
 
