@@ -34,7 +34,7 @@ async function getEbayToken() {
       res.on('end', () => {
         try {
           const j = JSON.parse(d);
-          if (!j.access_token) throw new Error('No token');
+          if (!j.access_token) throw new Error('No token: ' + d.slice(0,100));
           ebayToken = j.access_token;
           ebayExpiry = Date.now() + (j.expires_in - 60) * 1000;
           resolve(ebayToken);
@@ -47,7 +47,7 @@ async function getEbayToken() {
 }
 
 function detectGrade(input) {
-  const t = (typeof input === 'string' ? input : input?.title || '').toLowerCase();
+  const t = (typeof input === 'string' ? input : (input && input.title) || '').toLowerCase();
   if (t.includes('psa 10')||t.includes('gem mint')) return 'PSA 10';
   if (t.includes('psa 9.5')) return 'PSA 9.5';
   if (t.includes('psa 9')) return 'PSA 9';
@@ -62,46 +62,36 @@ function detectGrade(input) {
 }
 
 async function searchCardSight(query) {
-  // Extract year from query e.g. "2023-24" or "2024"
   const yearMatch = query.match(/20(\d{2})(?:-(\d{2}))?/);
   const queryYear = yearMatch ? yearMatch[0] : null;
 
-  // Step 1: search catalog with up to 20 results
   const search = await httpsGet(
     'api.cardsight.ai',
     `/v1/catalog/search?q=${encodeURIComponent(query)}&limit=20`,
     { 'X-API-Key': CARDSIGHT_KEY, 'Accept': 'application/json' }
   );
 
-  if (!search) return null;
+  // If CardSight is unreachable or returns nothing, bail early cleanly
+  if (!search || (!search.results && !search.cards)) return null;
   let cards = search.results || search.cards || [];
   if (!cards.length) return null;
 
-  // Filter by year if found in query
   if (queryYear) {
     const yearFiltered = cards.filter(c => c.year === queryYear);
     if (yearFiltered.length) cards = yearFiltered;
   }
 
-  // Score cards by how well they match query terms
   const qLower = query.toLowerCase();
-  const qWords = qLower.split(/\s+/).filter(w => w.length > 2);
-  
   cards = cards.map(c => {
-    const cStr = `${c.year||''} ${c.releaseName||''} ${c.setName||''} ${c.parallelName||''} ${c.name||''} ${c.number||''}`.toLowerCase();
     let score = c.relevance || 0;
-    // Boost if set name matches (Base Set = better for RC searches)
     if ((c.setName||'').toLowerCase() === 'base set') score += 2;
-    // Boost parallel match
     if (qLower.includes('silver') && (c.parallelName||'').toLowerCase().includes('silver')) score += 3;
     if (qLower.includes('gold') && (c.parallelName||'').toLowerCase().includes('gold')) score += 3;
-    // Penalize insert sets when searching for base
     const insertSets = ['deep space','dominance','fireworks','fractal','kaleidoscopic','global reach','talismen','instant impact','rising stars'];
     if (insertSets.some(s => (c.setName||'').toLowerCase().includes(s))) score -= 2;
     return { ...c, _score: score };
   }).sort((a,b) => b._score - a._score);
 
-  // Try top 3 card IDs and combine results
   const topIds = cards.slice(0, 3).map(c => c.id || c.card_id).filter(Boolean);
   if (!topIds.length) return null;
 
@@ -113,37 +103,37 @@ async function searchCardSight(query) {
     ))
   );
 
-  // Collect all records from all matched cards
   let allRecords = [];
   let bestImage = null;
 
   for (const pricing of pricingResults) {
     if (!pricing) continue;
-    const records = pricing.raw?.records || pricing.records || pricing.sales || [];
-    const cardName = pricing.card?.name || '';
-    const setInfo  = pricing.card?.set ? `${pricing.card.set.year} ${pricing.card.set.release} #${pricing.card.number}` : '';
+    const records = pricing.raw && pricing.raw.records ? pricing.raw.records
+                  : pricing.records ? pricing.records
+                  : pricing.sales ? pricing.sales : [];
+    const cardName = (pricing.card && pricing.card.name) || '';
+    const setInfo  = (pricing.card && pricing.card.set)
+      ? `${pricing.card.set.year} ${pricing.card.set.release} #${pricing.card.number}` : '';
 
     for (const r of records) {
-      // Prefer PSA 10 image
-      if (r.image_url && (!bestImage || r.title?.toLowerCase().includes('psa 10'))) {
+      if (r.image_url && (!bestImage || (r.title && r.title.toLowerCase().includes('psa 10')))) {
         bestImage = r.image_url;
       }
+      const grade = detectGrade({ title: r.title || '' });
       allRecords.push({
-        title:     r.title || `${setInfo} ${cardName}`,
+        title:     r.title || `${setInfo} ${cardName}`.trim(),
         price:     parseFloat(r.price || 0),
-        date:      (r.date || '').split('T')[0] || new Date().toISOString().split('T')[0],
-        condition: detectGrade({title: r.title || ''}) !== 'Raw' ? detectGrade({title: r.title || ''}) : (r.grade || r.condition || 'Raw'),
+        date:      ((r.date || '').split('T')[0]) || new Date().toISOString().split('T')[0],
+        condition: grade !== 'Raw' ? grade : (r.grade || r.condition || 'Raw'),
         url:       r.url || '#',
         image:     r.image_url || null,
         isSold:    r.listing_type === 'auction' || r.listing_type === 'sold',
-        source:    r.source || 'cardsight',
+        source:    'cardsight',
       });
     }
   }
 
   if (!allRecords.length) return null;
-
-  // Inject best image into first record
   if (bestImage && allRecords.length) allRecords[0].image = bestImage;
 
   return allRecords.filter(r => r.price > 0);
@@ -162,14 +152,19 @@ async function getEbayListings(query) {
       }),
     ]);
 
-    const process = items => (items||[]).map(item => ({
-      title: item.title||'', price: parseFloat(item.price?.value||0),
-      date: (item.itemEndDate||new Date().toISOString()).split('T')[0],
-      condition: item.condition||detectGrade(item.title), url: item.itemWebUrl||'#', isSold: false,
+    const mapItems = items => (items||[]).map(item => ({
+      title: item.title||'',
+      price: parseFloat((item.price && item.price.value) || 0),
+      date: ((item.itemEndDate || new Date().toISOString())).split('T')[0],
+      condition: item.condition || detectGrade(item.title),
+      url: item.itemWebUrl||'#',
+      image: (item.image && item.image.imageUrl) || (item.thumbnailImages && item.thumbnailImages[0] && item.thumbnailImages[0].imageUrl) || null,
+      isSold: false,
+      source: 'ebay',
     })).filter(s => s.price > 0 && !s.title.toLowerCase().includes('[digital]'));
 
-    const listings = process((allRes||{}).itemSummaries||[]);
-    const cheapest = process((cheapRes||{}).itemSummaries||[])
+    const listings = mapItems((allRes && allRes.itemSummaries) || []);
+    const cheapest = mapItems((cheapRes && cheapRes.itemSummaries) || [])
       .filter(i => i.price >= 1 && !['lot','bundle','master set'].some(w => i.title.toLowerCase().includes(w)))
       .sort((a,b) => a.price - b.price).slice(0,5);
 
@@ -179,27 +174,26 @@ async function getEbayListings(query) {
   }
 }
 
+// Supabase — fixed table name to match setup_database.sql (was 'sold_prices', should be 'card_prices')
 const SUPABASE_URL = 'https://lukwsphqdorfxcmefrui.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1a3dzcGhxZG9yZnhjbWVmcnVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDk5MDIsImV4cCI6MjA5NzEyNTkwMn0.9ir4EGztOM8HXLQGXrQtm2NzUOeCQfAUQpduteMj-F0';
 
 async function saveToSupabase(query, records) {
   try {
     const rows = records.map(r => ({
-      search_key: query.toLowerCase().trim(),
-      title: r.title,
-      price: r.price,
-      sold_date: r.date,
-      condition: r.condition,
-      url: r.url,
-      image_url: r.image || null,
-      scraped_at: new Date().toISOString(),
+      search_key:  query.toLowerCase().trim(),
+      title:       r.title,
+      price:       r.price,
+      sold_date:   r.date,
+      condition:   r.condition,
+      url:         r.url,
+      scraped_at:  new Date().toISOString(),
     }));
+    const body = JSON.stringify(rows);
     await new Promise((resolve) => {
-      const body = JSON.stringify(rows);
-      const u = new URL(SUPABASE_URL);
       const req = https.request({
-        hostname: u.hostname,
-        path: '/rest/v1/sold_prices',
+        hostname: 'lukwsphqdorfxcmefrui.supabase.co',
+        path: '/rest/v1/card_prices',  // fixed: was 'sold_prices'
         method: 'POST',
         headers: {
           'apikey': SUPABASE_KEY,
@@ -212,7 +206,7 @@ async function saveToSupabase(query, records) {
       req.on('error', resolve);
       req.write(body); req.end();
     });
-  } catch(e) {}
+  } catch(e) { /* non-fatal */ }
 }
 
 module.exports = async (req, res) => {
@@ -223,23 +217,28 @@ module.exports = async (req, res) => {
   if (!query) return res.status(400).json({ error: 'Query required' });
 
   try {
-    // Try CardSight for real market data first
+    // Try CardSight first for real historical sales data
     const csData = await searchCardSight(query);
 
     if (csData && csData.length > 0) {
       const cheapest = [...csData]
         .filter(i => !['lot','bundle'].some(w => i.title.toLowerCase().includes(w)))
         .sort((a,b) => a.price - b.price).slice(0,5);
-      // Save to Supabase in background
       saveToSupabase(query, csData).catch(()=>{});
-      return res.json({ listings: csData, cheapest, query, total: csData.length, dataType: 'cardsight' });
+      return res.json({ listings: csData, cheapest, query, total: csData.length, dataType: 'cardsight', source: 'cardsight' });
     }
 
-    // Fall back to eBay Browse API
+    // CardSight returned nothing — fall back to eBay Browse API (active listings)
+    // This is current asking prices, not sold comps. Frontend labels it accordingly.
     const { listings, cheapest } = await getEbayListings(query);
-    res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed' });
+
+    if (!listings.length) {
+      return res.json({ listings: [], cheapest: [], query, total: 0, dataType: 'none', source: 'none' });
+    }
+
+    res.json({ listings, cheapest, query, total: listings.length, dataType: 'listed', source: 'ebay' });
 
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, stack: e.stack });
   }
 };

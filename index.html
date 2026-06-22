@@ -379,7 +379,7 @@ async function doSearch(){
   document.getElementById('trendPage').style.display='none';
   document.getElementById('rlabel').innerHTML = `Loading prices for <strong>"${q}"</strong>...`;
   document.getElementById('gradeGrid').innerHTML = '';
-  document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading"><div class="spin"></div>Fetching prices...</div></td></tr>`;
+  document.getElementById('tbody').innerHTML = `<tr><td colspan="5"><div class="loading"><div class="spin"></div>Fetching prices...</div></td></tr>`;
   const as = document.getElementById('activeSection'); if(as) as.style.display='none';
   gradeFilter = null;
   document.querySelectorAll('[data-filter]').forEach(g=>g.classList.remove('active'));
@@ -396,10 +396,14 @@ async function doSearch(){
     }
     if(!allData.length){
       document.getElementById('rlabel').innerHTML = `No results for <strong>"${q}"</strong>`;
-      document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">No listings found. Try a different search.</div></td></tr>`;
+      document.getElementById('tbody').innerHTML = `<tr><td colspan="5"><div class="loading">No listings found. Try a different search.</div></td></tr>`;
       return;
     }
-    const dtype = json.dataType === 'cardsight' ? '✅ real market data' : json.dataType === 'sold' ? '✅ sold prices' : '📋 current listings';
+    const src = json.source || json.dataType || '';
+    const dtype = src === 'cardsight' ? '✅ real market data (CardSight)'
+                : src === 'ebay'      ? '📋 current eBay listings (no sold data available)'
+                : src === 'none'      ? '⚠️ no data found'
+                : '📋 current listings';
     document.getElementById('rlabel').innerHTML = `<strong>${allData.length}</strong> ${dtype} for <strong>"${q}"</strong>`;
     const sb = document.getElementById('soldBtn'); if(sb) sb.style.display = json.dataType === 'sold' ? 'none' : 'block';
     renderGrades();
@@ -418,7 +422,7 @@ async function doSearch(){
     }
     const sb2 = document.getElementById('soldBtn'); if(sb2) sb2.style.display='block';
   } catch(e){
-    document.getElementById('tbody').innerHTML = `<tr><td colspan="4"><div class="loading">Error loading prices. Try again.</div></td></tr>`;
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="5"><div class="loading">Error loading prices. Try again.</div></td></tr>`;
   }
 }
 
@@ -509,7 +513,7 @@ function getFiltered(){
 function renderTable(){
   const rows = getFiltered().sort((a,b)=>a.price-b.price).slice(0,50);
   if(!rows.length){
-    document.getElementById('tbody').innerHTML=`<tr><td colspan="4"><div class="loading">No listings for this grade.</div></td></tr>`;
+    document.getElementById('tbody').innerHTML=`<tr><td colspan="5"><div class="loading">No listings for this grade.</div></td></tr>`;
     return;
   }
   document.getElementById('tbody').innerHTML = rows.map(s=>{
@@ -545,7 +549,7 @@ function renderChart(){
   const canvas = document.getElementById('priceChart');
   if(!box || !canvas) return;
 
-  const data = clean(allData).filter(s => s.date && s.price > 0);
+  const data = clean(allData).filter(s => s.date && s.price > 0 && s.date.length >= 7);
   if(data.length < 3){ box.style.display='none'; return; }
 
   // Sort by date
